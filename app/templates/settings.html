@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Protocol 3 Monitor · Settings</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<header>
+  <div class="brand"><a href="{{ url_for('web.index') }}" class="back">← Dashboard</a> Settings</div>
+  <div class="hdr-right">
+    <span id="conn" class="tag">…</span>
+    <span class="muted">{{ user }}</span>
+    <form method="post" action="{{ url_for('web.logout') }}"><button class="btn small">Sign out</button></form>
+  </div>
+</header>
+
+<main class="settings">
+  <p class="muted intro">Changes are saved to <code id="envfile">.env</code> (previous version kept as <code>.env.bak</code>)
+    and applied immediately, with no restart. Login, API keys and the high-limit write switch can only be changed in <code>.env</code>.</p>
+  <div id="sections"><p class="muted">Loading…</p></div>
+  <section class="card">
+    <h2>Set in .env only</h2>
+    <dl class="kv" id="readonly"></dl>
+  </section>
+</main>
+
+<div class="savebar" id="savebar" hidden>
+  <span id="dirty">0 unsaved changes</span>
+  <span class="grow"></span>
+  <button class="btn" id="discard">Discard</button>
+  <button class="btn primary" id="save">Save &amp; apply</button>
+</div>
+
+<script src="{{ url_for('static', filename='settings.js') }}"></script>
+</body>
+</html>

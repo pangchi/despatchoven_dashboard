@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Protocol 3 Monitor</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<header>
+  <div class="brand">Protocol 3 Monitor{% if cfg.simulator %} <span class="tag warn">SIMULATOR</span>{% endif %}</div>
+  <div class="hdr-right">
+    <span id="conn" class="tag">connecting…</span>
+    <span id="dbtag" class="tag">DB</span>
+    <a class="btn small" href="{{ url_for('web.runs_page') }}">Runs</a>
+    <a class="btn small" href="{{ url_for('web.settings_page') }}">Settings</a>
+    <span class="muted">{{ user }}</span>
+    <form method="post" action="{{ url_for('web.logout') }}"><button class="btn small">Sign out</button></form>
+  </div>
+</header>
+
+<main>
+  <section class="tiles">
+    <div class="tile big"><div class="lbl">Process value</div><div class="val" id="pv">–</div></div>
+    <div class="tile"><div class="lbl">Setpoint</div><div class="val" id="sp">–</div></div>
+    <div class="tile"><div class="lbl">High-limit PV</div><div class="val" id="hlpv">–</div><div class="sub" id="hlsp"></div></div>
+    <div class="tile"><div class="lbl">Output power</div><div class="val" id="power">–</div><div class="meter"><i id="powerbar"></i></div></div>
+    <div class="tile"><div class="lbl">Mode</div><div class="val sm" id="mode">–</div><div class="sub" id="modesub"></div></div>
+    <div class="tile"><div class="lbl">Logging</div><div class="val sm" id="state">–</div><div class="sub" id="logint"></div></div>
+  </section>
+
+  <section class="flags" id="flags"></section>
+
+  <section class="card runcard" id="runcard">
+    <div class="runcard-main">
+      <div>
+        <div class="lbl">Run</div>
+        <div class="runline" id="runline">–</div>
+      </div>
+      <form class="labelform" id="labelform">
+        <label for="runlabel" id="runlabel-lbl">Label for next run</label>
+        <input id="runlabel" maxlength="100" placeholder="lot / batch / job no.">
+        <button class="btn" type="submit">Set</button>
+      </form>
+      <a class="btn small" id="runlink" href="{{ url_for('web.runs_page') }}">All runs →</a>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-hdr">
+      <h2>Trend</h2>
+      <div class="seg" id="range">
+        <button data-m="30">30 m</button><button data-m="60" class="on">1 h</button>
+        <button data-m="360">6 h</button><button data-m="1440">24 h</button><button data-m="10080">7 d</button>
+      </div>
+    </div>
+    <canvas id="chart" height="300"></canvas>
+    <div class="legend"><span class="k pv"></span>PV <span class="k sp"></span>SP <span class="k hl"></span>High-limit PV <span class="k pw"></span>Power %</div>
+  </section>
+
+  <section class="grid2">
+    <div class="card">
+      <h2>Control</h2>
+      {% if not cfg.CONTROL_ENABLED %}<p class="err">Remote control is disabled (CONTROL_ENABLED=false).</p>{% endif %}
+      <div class="row">
+        <label>Mode</label>
+        <div class="seg">
+          <button data-mode="manual">Manual</button><button data-mode="timer">Timer</button>
+          <button data-mode="profile">Profile</button><button data-mode="select">Select</button>
+        </div>
+      </div>
+      <div class="row">
+        <label for="spin">Setpoint</label>
+        <input id="spin" type="number" step="0.1"><button class="btn" id="spset">Set</button>
+        <span class="muted" id="splim"></span>
+      </div>
+      <div class="row">
+        <label>Manual</label>
+        <button class="btn primary" data-manual="start">Start</button>
+        <button class="btn danger" data-manual="stop">Stop</button>
+      </div>
+      <div class="row">
+        <label for="tsec">Timer</label>
+        <input id="tsec" type="number" min="1" max="65535" placeholder="seconds">
+        <button class="btn primary" data-timer="start">Start</button>
+        <button class="btn danger" data-timer="stop">Stop</button>
+      </div>
+      <div class="row">
+        <label for="pnum">Profile</label>
+        <input id="pnum" type="number" min="0" max="63" placeholder="0-63">
+        <button class="btn primary" data-profile="run">Run</button>
+        <button class="btn" data-profile="hold">Hold</button>
+        <button class="btn" data-profile="release">Release</button>
+        <button class="btn" data-profile="next">Next seg</button>
+        <button class="btn danger" data-profile="abort">Abort</button>
+      </div>
+      <div class="row">
+        <label>Relays</label>
+        <span id="relays"></span>
+      </div>
+      {% if cfg.ALLOW_HIGH_LIMIT_WRITE %}
+      <div class="row">
+        <label for="hlin">High limit</label>
+        <input id="hlin" type="number" step="0.1"><button class="btn danger" id="hlset">Set</button>
+      </div>
+      {% endif %}
+      <p id="msg" class="msg"></p>
+    </div>
+
+    <div class="card">
+      <h2>System</h2>
+      <dl class="kv" id="sys"></dl>
+      <h2>Recent events</h2>
+      <div class="events" id="events"></div>
+    </div>
+  </section>
+</main>
+<script src="{{ url_for('static', filename='chart.js') }}"></script>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

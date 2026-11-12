@@ -1,0 +1,6 @@
+Flask>=3.0,<4
+python-dotenv>=1.0
+psycopg2-binary>=2.9
+minimalmodbus>=2.1
+pyserial>=3.5
+gunicorn>=22.0

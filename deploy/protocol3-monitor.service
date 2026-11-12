@@ -1,0 +1,22 @@
+[Unit]
+Description=Protocol 3 oven remote monitor
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=p3mon
+Group=p3mon
+# dialout = access to /dev/ttyUSB* / /dev/ttyAMA*
+SupplementaryGroups=dialout
+WorkingDirectory=/opt/protocol3-monitor
+# ONE worker only: the poller thread owns the serial port
+ExecStart=/opt/protocol3-monitor/venv/bin/gunicorn -w 1 --threads 4 -b 0.0.0.0:8000 --timeout 60 wsgi:app
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

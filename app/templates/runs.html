@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Protocol 3 Monitor · Runs</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<header>
+  <div class="brand"><a href="{{ url_for('web.index') }}" class="back">← Dashboard</a> Runs</div>
+  <div class="hdr-right">
+    <a class="btn small" href="{{ url_for('web.settings_page') }}">Settings</a>
+    <span class="muted">{{ user }}</span>
+    <form method="post" action="{{ url_for('web.logout') }}"><button class="btn small">Sign out</button></form>
+  </div>
+</header>
+<main>
+  <form class="card filters" id="filters">
+    <label>Search <input name="q" placeholder="label or notes" maxlength="100"></label>
+    <label>Type
+      <select name="mode"><option value="">All</option><option value="profile">Profile</option>
+        <option value="manual">Manual</option><option value="timer">Timer</option></select></label>
+    <label>Profile # <input name="profile" type="number" min="0" max="63" class="narrow"></label>
+    <label>Result
+      <select name="result"><option value="">All</option><option>running</option><option>completed</option>
+        <option>aborted</option><option>stopped</option><option>error</option><option>interrupted</option></select></label>
+    <label>From <input name="from" type="date"></label>
+    <label>To <input name="to" type="date"></label>
+    <button class="btn" type="reset">Clear</button>
+  </form>
+  <section class="card">
+    <div class="card-hdr"><h2 id="count">Runs</h2><span class="muted" id="range"></span></div>
+    <div class="tablewrap">
+      <table class="runs">
+        <thead><tr><th>#</th><th>Started</th><th>Duration</th><th>Program</th><th>Label</th><th>Result</th>
+          <th class="num">Max PV</th><th class="num">Max over SP</th><th>Flags</th><th>Started by</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="10" class="muted">Loading…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="pager"><button class="btn small" id="prev">← Newer</button><span id="page" class="muted"></span>
+      <button class="btn small" id="next">Older →</button></div>
+  </section>
+</main>
+<script src="{{ url_for('static', filename='chart.js') }}"></script>
+<script src="{{ url_for('static', filename='runs.js') }}"></script>
+</body>
+</html>
