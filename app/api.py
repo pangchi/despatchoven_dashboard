@@ -17,6 +17,11 @@ class BadRequest(Exception):
     pass
 
 
+def _version():
+    from . import __version__
+    return __version__
+
+
 def _svc():
     return current_app.extensions["p3"]
 
@@ -93,13 +98,13 @@ def _bad(e):
 @bp.get("/health")
 def health():
     st = _svc().poller.status()
-    return jsonify(ok=st["comm_ok"] and st["db_ok"], comm_ok=st["comm_ok"], db_ok=st["db_ok"])
+    return jsonify(ok=st["comm_ok"] and st["db_ok"], comm_ok=st["comm_ok"], db_ok=st["db_ok"], version=_version())
 
 
 @bp.get("/status")
 @api_auth
 def status():
-    return jsonify(_svc().poller.status())
+    return jsonify({**_svc().poller.status(), "version": _version()})
 
 
 @bp.get("/telemetry")
@@ -144,6 +149,7 @@ def system():
     svc = _svc()
     cfg = svc.cfg
     return jsonify(
+        version=_version(),
         disk=disk_usage(cfg.DISK_CHECK_PATH), disk_path=cfg.DISK_CHECK_PATH,
         purge_threshold_pct=cfg.PURGE_THRESHOLD_PCT, purge_target_pct=cfg.PURGE_TARGET_PCT,
         retention_days=cfg.RETENTION_DAYS, db=svc.db.stats(),

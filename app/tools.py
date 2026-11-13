@@ -4,6 +4,7 @@
   python -m app.tools gen-key [name]    -> API key entry for API_KEYS
   python -m app.tools hash-password     -> WEB_PASSWORD_HASH value (prompts)
   python -m app.tools test-connection   -> read the controller once using .env settings
+  python -m app.tools version           -> print the app version
 """
 import getpass
 import json
@@ -13,7 +14,10 @@ import sys
 
 def main(argv):
     cmd = argv[1] if len(argv) > 1 else ""
-    if cmd == "gen-secret":
+    if cmd in ("version", "--version", "-V"):
+        from . import __version__
+        print(__version__)
+    elif cmd == "gen-secret":
         print(secrets.token_hex(32))
     elif cmd == "gen-key":
         name = argv[2] if len(argv) > 2 else "client"

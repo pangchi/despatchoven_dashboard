@@ -60,6 +60,8 @@ if [ "$UNINSTALL" = 1 ]; then
 fi
 
 # ---------------------------------------------------------------- checks
+APP_VERSION=$(cat "$APP_DIR/VERSION" 2>/dev/null || echo unknown)
+say "Protocol 3 Monitor v$APP_VERSION in $APP_DIR"
 VENV=$APP_DIR/venv
 [ -x "$VENV/bin/gunicorn" ] || die "$VENV/bin/gunicorn not found - run ./setup.sh in $APP_DIR first"
 [ -f "$APP_DIR/wsgi.py" ]   || die "wsgi.py not found in $APP_DIR"
@@ -182,6 +184,7 @@ if [ -n "$HEALTH" ]; then
   IP=$(hostname -I 2>/dev/null | awk '{print $1}')
   cat <<EOF
 
+Version:    v$APP_VERSION
 Dashboard:  http://${IP:-<pi-ip>}:$PORT/
 Logs:       journalctl -u $NAME -f
 Restart:    sudo systemctl restart $NAME      (after editing .env)

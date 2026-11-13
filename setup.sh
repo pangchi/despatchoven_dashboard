@@ -51,6 +51,7 @@ import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)
 EOF
 "$PYTHON" -c "import venv, ensurepip" 2>/dev/null \
   || die "Python venv module missing. Install it: sudo apt install python3-venv"
+say "Protocol 3 Monitor v$(cat "$PROJECT_DIR/VERSION" 2>/dev/null || echo unknown) in $PROJECT_DIR"
 say "Using $("$PYTHON" --version) at $(command -v "$PYTHON")"
 
 # ---------------------------------------------------------------- virtualenv

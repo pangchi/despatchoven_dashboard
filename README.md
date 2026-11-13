@@ -23,6 +23,25 @@ Protocol 3 ──RS-485 (term. 19/20/21)── USB-RS485 adapter ── Raspberr
 - Starts even when the database is unreachable, so you can fix it from Settings; it reconnects every 30 s on its own.
 - `SERIAL_PORT=SIMULATOR` runs a simulated oven for development without hardware.
 
+## Version
+
+The version lives in the **`VERSION`** file in the project root, and everything reads it from there:
+
+| Where | Shows |
+|---|---|
+| Every page header, login page, dashboard *System* panel, Settings | `v1.4.1` |
+| `GET /api/v1/health`, `/status`, `/system` | `"version": "1.4.1"` |
+| Every HTTP response | `X-App-Version: 1.4.1` header |
+| `venv/bin/python -m app.tools version` | `1.4.1` |
+| `setup.sh`, `install-service.sh`, service log on start, audit log `startup` event | the version being installed / started |
+
+Static files are served as `app.js?v=1.4.1`, so browsers load fresh JS/CSS after an update instead of a cached old copy.
+To release a new version: change `VERSION`, add a section to `CHANGELOG.md`, then restart the service.
+
+```bash
+curl -s http://<pi>:8000/api/v1/health      # {"ok":true,...,"version":"1.4.1"}
+```
+
 ## Hardware & controller setup
 
 1. **Wiring** – Protocol 3 rear terminals: **19 = −, 20 = +, 21 = common** (RS485 Comms). Connect to a USB-RS485 adapter (2-wire, half duplex). For long runs add a 120 Ω terminator at the far end.
@@ -311,4 +330,5 @@ setup.sh          venv + requirements + .env bootstrap
 install-service.sh  systemd service for the folder it lives in
 tests/            pytest (purge policy)
 wsgi.py           entry point
+VERSION           app version (single source)
 ```

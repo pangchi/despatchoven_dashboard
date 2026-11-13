@@ -3,6 +3,18 @@
 All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semantic versioning.
 
+## [1.4.1] - 2026-11-13
+
+### Added
+- `VERSION` file as the single source of the app version.
+- Version shown in every page header, on the login page, in the dashboard System panel and on the Settings page.
+- `version` in `/api/v1/health`, `/status` and `/system`, plus an `X-App-Version` header on every response.
+- `python -m app.tools version`; `setup.sh` and `install-service.sh` print the version they install.
+
+### Changed
+- Static files carry `?v=<version>`, so browsers pick up new JS/CSS right after an update.
+- Header wraps on narrow screens, and the username is hidden below 480 px wide.
+
 ## [1.4.0] - 2026-11-12
 
 ### Added

@@ -138,3 +138,9 @@ label.stack input, textarea { width: 100%; background: var(--bg); color: var(--f
 .row-end { display: flex; justify-content: flex-end; align-items: center; gap: 10px; }
 .row-end .msg { margin: 0; }
 @media (max-width: 640px) { .labelform input { width: 100%; flex: 1 1 160px; } }
+
+/* version badge */
+.ver { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; border: 1px solid var(--line); border-radius: 99px; padding: 1px 7px; white-space: nowrap; }
+.ver.center { border: 0; text-align: center; margin: 0; }
+.hdr-right { flex-wrap: wrap; justify-content: flex-end; }
+@media (max-width: 480px) { .hdr-right > .muted { display: none; } }

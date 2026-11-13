@@ -12,7 +12,16 @@ from .db import Database
 from .poller import Poller
 from .runs import RunTracker
 
-__version__ = "1.4.0"
+def _read_version():
+    """Single source of truth: the VERSION file in the project root."""
+    try:
+        from pathlib import Path
+        return (Path(__file__).resolve().parent.parent / "VERSION").read_text().strip() or "unknown"
+    except OSError:
+        return "unknown"
+
+
+__version__ = _read_version()
 log = logging.getLogger("protocol3")
 
 
@@ -73,8 +82,19 @@ def create_app(cfg=None):
         msg = str(e).strip().splitlines()[0] if str(e).strip() else "database error"
         return {"error": f"database unavailable: {msg}"}, 503
 
+    @app.context_processor
+    def _inject_version():
+        return {"app_version": __version__}
+
+    @app.url_defaults
+    def _static_cache_bust(endpoint, values):
+        # /static/app.js?v=1.4.1 - browsers fetch fresh JS/CSS after every update
+        if endpoint == "static":
+            values.setdefault("v", __version__)
+
     @app.after_request
     def _headers(resp):
+        resp.headers.setdefault("X-App-Version", __version__)
         resp.headers.setdefault("X-Content-Type-Options", "nosniff")
         resp.headers.setdefault("X-Frame-Options", "DENY")
         resp.headers.setdefault("Referrer-Policy", "same-origin")

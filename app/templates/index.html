@@ -13,6 +13,7 @@
     <span id="dbtag" class="tag">DB</span>
     <a class="btn small" href="{{ url_for('web.runs_page') }}">Runs</a>
     <a class="btn small" href="{{ url_for('web.settings_page') }}">Settings</a>
+    <span class="ver" title="Protocol 3 Monitor version">v{{ app_version }}</span>
     <span class="muted">{{ user }}</span>
     <form method="post" action="{{ url_for('web.logout') }}"><button class="btn small">Sign out</button></form>
   </div>

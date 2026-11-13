@@ -126,6 +126,7 @@ async function refreshSystem() {
     const s = await api("/system");
     const mb = (b) => (b / 1048576).toFixed(1) + " MB";
     const kv = [
+      ["Version", "v" + s.version],
       ["Disk used", `${s.disk.pct}% of ${(s.disk.total / 1e9).toFixed(1)} GB (purge at ${s.purge_threshold_pct}%)`],
       ["Database", mb(s.db.db_bytes) + ` · ${s.db.partitions} day partitions`],
       ["Data from", s.db.oldest ? new Date(s.db.oldest).toLocaleString() : "–"],

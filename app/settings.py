@@ -62,6 +62,11 @@ SERIAL_KEYS = {"SERIAL_PORT", "SERIAL_BAUD", "SERIAL_PARITY", "SERIAL_STOPBITS",
 DB_KEYS = {"DB_HOST", "DB_PORT", "DB_NAME", "DB_USER", "DB_PASSWORD"}
 
 
+def _app_version():
+    from . import __version__
+    return __version__
+
+
 class SettingsError(ValueError):
     pass
 
@@ -87,7 +92,7 @@ def describe(cfg):
     return {
         "sections": sections,
         "env_file": str(cfg.ENV_FILE),
-        "readonly": {"ALLOW_HIGH_LIMIT_WRITE": cfg.ALLOW_HIGH_LIMIT_WRITE,
+        "readonly": {"App version": _app_version(), "ALLOW_HIGH_LIMIT_WRITE": cfg.ALLOW_HIGH_LIMIT_WRITE,
                      "API keys": len(cfg.API_KEYS), "WEB_USERNAME": cfg.WEB_USERNAME},
     }
 
