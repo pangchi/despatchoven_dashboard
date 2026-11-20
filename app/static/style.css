@@ -217,3 +217,8 @@ body.viewonly .viewonly-note { display: block; }
 body.viewonly .control-only { display: none !important; }
 .login .note { margin: 0; padding: 8px 10px; border-radius: 6px; background: var(--bg); font-size: 13px; }
 .viewonly-note a, .login .note a { color: inherit; font-weight: 600; }
+
+/* change password */
+.pwform .help.bad { color: var(--bad); }
+.pwform .row-end { margin-top: 10px; }
+.pwform label.check { display: flex; gap: 6px; align-items: center; color: var(--muted); }

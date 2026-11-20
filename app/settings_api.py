@@ -176,3 +176,74 @@ def unlock():
         detail = {"scope": scope, "subject": subject}
     svc.db.log_event(g.actor, "login_unlocked", {**detail, "cleared": n})
     return jsonify(cleared=n, lockouts=svc.lockouts.active())
+
+
+# ---------------------------------------------------------------- change password
+MIN_PASSWORD = 8
+
+
+@bp.post("/password")
+@session_api
+def change_password():
+    """Check the current password, store the new hash in .env, apply it now and sign out
+    other browsers. Wrong current passwords count toward the sign-in lockout."""
+    from flask import session
+    from werkzeug.security import check_password_hash, generate_password_hash
+
+    from .auth import _client_ip, pw_fingerprint
+    from .lockout import fmt_wait
+
+    svc = _svc()
+    cfg = svc.cfg
+    data = _json()
+    current, new, confirm = (data.get(k) for k in ("current", "new", "confirm"))
+    if not all(isinstance(v, str) for v in (current, new, confirm)):
+        raise S.SettingsError("send current, new and confirm")
+    ip = _client_ip()
+    subjects = [("user", cfg.WEB_USERNAME), ("ip", ip)]
+    locked = svc.lockouts.check(subjects)
+    if locked:
+        return jsonify(error=f"too many failed attempts - locked for {fmt_wait(locked[2])}"), 429
+    if not cfg.WEB_PASSWORD_HASH or not check_password_hash(cfg.WEB_PASSWORD_HASH, current):
+        res = svc.lockouts.failure(subjects)
+        svc.db.log_event(g.actor, "password_change_failed", {"ip": ip, "reason": "wrong current password",
+                                                             "attempts_left": res["remaining"]}, ok=False)
+        for scope, subject, minutes, level in res["locked"]:
+            svc.db.log_event(g.actor, "login_locked", {"scope": scope, "subject": subject, "minutes": minutes,
+                                                       "level": level, "ip": ip}, ok=False)
+        msg = "Current password is wrong."
+        if res["locked"]:
+            msg += f" Sign-in is now locked for {max(m for _, _, m, _ in res['locked'])} minutes."
+        elif res["remaining"] is not None and res["remaining"] <= 2:
+            msg += f" {res['remaining']} attempt(s) left before sign-in is locked."
+        return jsonify(error=msg), 403
+
+    problems = []
+    if new != confirm:
+        problems.append("the two new passwords do not match")
+    if len(new) < MIN_PASSWORD:
+        problems.append(f"use at least {MIN_PASSWORD} characters")
+    if len(new) > 256:
+        problems.append("use at most 256 characters")
+    if new == current:
+        problems.append("the new password must be different from the current one")
+    if new.strip().lower() == cfg.WEB_USERNAME.lower():
+        problems.append("the password must not be the user name")
+    if new and len(set(new)) <= 2:
+        problems.append("too simple (repeated characters)")
+    if problems:
+        raise S.SettingsError("New password: " + "; ".join(problems) + ".")
+
+    new_hash = generate_password_hash(new)
+    with _apply_lock:
+        try:
+            S.write_env(cfg.ENV_FILE, {"WEB_PASSWORD_HASH": new_hash})
+        except PermissionError as e:
+            return jsonify(error=f"{e} - fix ownership: sudo chown <service user> {cfg.ENV_FILE}"), 500
+        cfg.WEB_PASSWORD_HASH = new_hash
+        os.environ["WEB_PASSWORD_HASH"] = new_hash     # so a later settings reload keeps the new hash
+    svc.lockouts.success(subjects)
+    session["pwv"] = pw_fingerprint(cfg)               # this browser stays signed in, all others are out
+    svc.db.log_event(g.actor, "password_changed", {"ip": ip, "other_sessions": "signed out"})
+    log.warning("%s changed the dashboard password from %s", g.actor, ip)
+    return jsonify(ok=True, message="Password changed. Other browsers have been signed out.")

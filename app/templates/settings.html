@@ -17,7 +17,23 @@
 
 <main class="settings">
   <p class="muted intro">Changes are saved to <code id="envfile">.env</code> (previous version kept as <code>.env.bak</code>)
-    and applied immediately, with no restart. Login, API keys and the high-limit write switch can only be changed in <code>.env</code>.</p>
+    and applied immediately, with no restart. API keys and the high-limit write switch can only be changed in <code>.env</code>.</p>
+
+  <form class="card pwform" id="pwform" autocomplete="on">
+    <h2>Change password</h2>
+    <p class="muted small">For user <b>{{ cfg.WEB_USERNAME }}</b>. Other browsers signed in with the old password are signed out; this one stays signed in.</p>
+    <input type="text" name="username" value="{{ cfg.WEB_USERNAME }}" autocomplete="username" hidden>
+    <div class="srow"><label for="pw_cur">Current password</label>
+      <div class="sval"><input id="pw_cur" type="password" autocomplete="current-password" required></div></div>
+    <div class="srow"><label for="pw_new">New password</label>
+      <div class="sval"><input id="pw_new" type="password" autocomplete="new-password" minlength="8" maxlength="256" required>
+        <div class="help" id="pw_hint">At least 8 characters. A short sentence is easy to remember and hard to guess.</div></div></div>
+    <div class="srow"><label for="pw_rep">Repeat new password</label>
+      <div class="sval"><input id="pw_rep" type="password" autocomplete="new-password" required>
+        <div class="help" id="pw_match"></div></div></div>
+    <div class="row-end"><label class="check small"><input type="checkbox" id="pw_show"> Show</label>
+      <button class="btn primary" type="submit" id="pw_btn">Change password</button></div>
+  </form>
   <div id="sections"><p class="muted">Loading…</p></div>
   <section class="card">
     <h2>Set in .env only</h2>

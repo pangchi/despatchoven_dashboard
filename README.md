@@ -186,6 +186,25 @@ Sign-in and API keys lock after **consecutive failed attempts**:
 
 Note: someone who knows your username can keep the **account** locked by failing on purpose. That's the price of stopping guessing spread over many machines. If that happens, check the Event log for the address and unlock from the Pi.
 
+## Changing the password
+
+**From the dashboard:** **Settings → Change password** (at the top). Enter the current password and the new one twice, then click **Change password**.
+- **New password rules:** at least 8 characters, different from the current one, not the user name, and not a repeated character. The page shows live hints for length and whether the two entries match.
+- **Applies at once:** the new hash is written to `.env` (quoted; the previous file is kept as `.env.bak`) and used immediately, with no restart.
+- **Other browsers are signed out; this one stays signed in.** Each sign-in stores a fingerprint of the current password hash, and a session whose fingerprint no longer matches is dropped. Browsers signed in before v1.8.0 have no fingerprint and must sign in once more after the update.
+- **Lockout applies:** a wrong current password counts toward the sign-in lockout, so a browser left signed in can't be used to guess the password.
+- **Audit:** the change (`password_changed`) and refusals (`password_change_failed`) go into the Event log under *Access*.
+- **Who can change it:** only a password session. Passwordless local users and API keys are refused.
+
+**From the Pi's command line** (e.g. if you forgot the password):
+```bash
+cd /opt/oven-dashboard
+sudo -u $(stat -c %U .env) venv/bin/python -m app.tools hash-password   # prints WEB_PASSWORD_HASH='…'
+sudo nano .env                                                           # replace that line, keep the quotes
+sudo systemctl restart oven-dashboard
+```
+To change the user name, edit `WEB_USERNAME` in `.env` and restart.
+
 ## No password on the local network (optional)
 
 The dashboard can open **without a password** from addresses you trust, such as a screen on the Pi itself or PCs on the workshop LAN. It is **off by default**. Turn it on in **Settings → Login security**, or in `.env`:
@@ -293,7 +312,7 @@ How saving works:
 - During a test or auto-detect, live polling pauses for a moment so the port is free; the header shows `paused: …`.
 - Every test and save is recorded in the audit log, with the DB password masked.
 
-Not editable here, only in `.env` with a service restart: `SECRET_KEY`, `API_KEYS`, `WEB_USERNAME`/`WEB_PASSWORD_HASH` and `ALLOW_HIGH_LIMIT_WRITE`. The high-limit switch stays file-only on purpose, so a stolen dashboard password cannot enable writes to the over-temperature limit.
+The password is changed in its own **Change password** card on this page. Not editable here, only in `.env` with a service restart: `SECRET_KEY`, `API_KEYS`, `WEB_USERNAME` and `ALLOW_HIGH_LIMIT_WRITE`. The high-limit switch stays file-only on purpose, so a stolen dashboard password cannot enable writes to the over-temperature limit.
 
 The service user must be able to write `.env` and its folder. `install-service.sh` already sets this up; otherwise run `sudo chown -R <service-user> /opt/oven-dashboard`.
 
@@ -304,7 +323,7 @@ All credentials live in `.env` (`chmod 600`, excluded by `.gitignore`); `.env.ex
 | Setting | Default | Purpose |
 |---|---|---|
 | `SECRET_KEY` | – | Flask session key (required) |
-| `WEB_USERNAME` / `WEB_PASSWORD_HASH` | admin / – | Dashboard login (werkzeug hash) |
+| `WEB_USERNAME` / `WEB_PASSWORD_HASH` | admin / – | Dashboard login (werkzeug hash; change it in Settings → Change password or with `app.tools hash-password`) |
 | `API_KEYS` | – | Comma-separated `name:key`; name is recorded in the audit log |
 | `DB_HOST/PORT/NAME/USER/PASSWORD` | localhost… | PostgreSQL connection |
 | `SERIAL_PORT` | /dev/ttyUSB0 | RS-485 device or `SIMULATOR` |
@@ -374,6 +393,7 @@ Settings endpoints (**dashboard login only**, API keys get `401`; writes need `X
 | `POST /settings` | `{"SERIAL_BAUD":9600, ...}` | Validate, write `.env`, apply live; returns changed keys |
 | `GET /settings/serial-ports` | – | Detected adapters |
 | `GET /settings/lockouts` | – | Current locks and failed-attempt counts |
+| `POST /settings/password` | `{"current":"…","new":"…","confirm":"…"}` | Change the dashboard password; other sessions are signed out |
 | `POST /settings/lockouts/unlock` | `{"scope":"ip","subject":"1.2.3.4"}` or `{"all":true}` | Clear a lock (scope `user`, `ip` or `api`) |
 | `POST /settings/test-serial` | serial fields (optional) | Test with these values, current ones for anything omitted |
 | `POST /settings/detect-serial` | `SERIAL_PORT`, `MODBUS_ADDRESS` (optional) | Baud/parity scan |

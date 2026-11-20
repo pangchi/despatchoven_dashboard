@@ -104,10 +104,30 @@ def local_identity():
     return {"name": f"local:{ip}", "label": f"Local · {ip}", "kind": "local", "level": level, "ip": ip}
 
 
+def pw_fingerprint(cfg=None):
+    """Short fingerprint of the current password hash, stored in each session at sign-in.
+    Changing the password changes it, which signs out every other browser."""
+    import hashlib
+    cfg = cfg or current_app.config["P3"]
+    return hashlib.sha256((cfg.WEB_PASSWORD_HASH or "").encode()).hexdigest()[:16]
+
+
+def password_user():
+    """User name of a valid password session, or None (stale sessions are cleared)."""
+    user = session.get("user")
+    if not user:
+        return None
+    if session.get("pwv") != pw_fingerprint():
+        session.clear()               # password changed since this browser signed in
+        return None
+    return user
+
+
 def current_user():
     """Who is making this request: a password session, a passwordless local user, or None."""
-    if session.get("user"):
-        return {"name": f"web:{session['user']}", "label": session["user"], "kind": "password", "level": "control"}
+    user = password_user()
+    if user:
+        return {"name": f"web:{user}", "label": user, "kind": "password", "level": "control"}
     return local_identity()
 
 
@@ -141,11 +161,12 @@ def session_api(fn):
 
     @functools.wraps(fn)
     def wrapper(*a, **kw):
-        if not session.get("user"):
+        user = password_user()
+        if not user:
             return jsonify(error="settings need a dashboard login (API keys are not accepted here)"), 401
         if request.method not in ("GET", "HEAD") and request.headers.get("X-Requested-With") != "p3-dashboard":
             return jsonify(error="missing X-Requested-With header"), 403
-        g.actor = f"web:{session['user']}"
+        g.actor = f"web:{user}"
         return fn(*a, **kw)
 
     return wrapper

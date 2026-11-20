@@ -52,6 +52,7 @@ _CATEGORY = {
     "profile": "control", "relay": "control", "set_high_limit": "control",
     "login": "access", "logout": "access", "login_failed": "access", "login_locked": "access",
     "api_key_rejected": "access", "api_locked": "access", "login_unlocked": "access", "local_access": "access",
+    "password_changed": "access", "password_change_failed": "access",
 }
 _SEVERITY = {
     "high_limit_tripped": "alarm", "sensor_break": "alarm", "hl_sensor_open": "alarm",

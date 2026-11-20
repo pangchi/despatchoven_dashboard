@@ -247,3 +247,36 @@ async function status() {
 
 api("/api/v1/settings").then(render).catch((e) => { $("sections").textContent = "Could not load settings: " + e.message; });
 status(); setInterval(status, 3000);
+
+
+// ---------------------------------------------------------------- change password
+(() => {
+  const f = $("pwform"); if (!f) return;
+  const cur = $("pw_cur"), nw = $("pw_new"), rep = $("pw_rep"), hint = $("pw_hint"), match = $("pw_match");
+  const check = () => {
+    const n = nw.value;
+    hint.className = "help" + (n && n.length < 8 ? " bad" : "");
+    hint.textContent = !n ? "At least 8 characters. A short sentence is easy to remember and hard to guess."
+      : n.length < 8 ? `${8 - n.length} more character${8 - n.length === 1 ? "" : "s"} needed`
+      : n.length < 12 ? "OK – longer is stronger" : "Good length";
+    match.className = "help" + (rep.value && rep.value !== n ? " bad" : "");
+    match.textContent = !rep.value ? "" : rep.value === n ? "✓ Matches" : "Does not match yet";
+  };
+  [nw, rep].forEach((i) => i.addEventListener("input", check));
+  $("pw_show").onchange = (e) => { [cur, nw, rep].forEach((i) => { i.type = e.target.checked ? "text" : "password"; }); };
+  f.onsubmit = async (e) => {
+    e.preventDefault();
+    if (nw.value !== rep.value) { toast("The two new passwords do not match", "err"); rep.focus(); return; }
+    if (nw.value.length < 8) { toast("Use at least 8 characters", "err"); nw.focus(); return; }
+    $("pw_btn").disabled = true;
+    try {
+      const r = await api("/api/v1/settings/password", { current: cur.value, new: nw.value, confirm: rep.value });
+      f.reset(); check(); $("pw_show").checked = false; [cur, nw, rep].forEach((i) => { i.type = "password"; });
+      toast(r.message, "ok");
+    } catch (err) {
+      toast(err.message, "err");
+      if (/current/i.test(err.message)) { cur.select(); cur.focus(); }
+    }
+    $("pw_btn").disabled = false;
+  };
+})();

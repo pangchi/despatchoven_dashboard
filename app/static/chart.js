@@ -127,6 +127,8 @@ function describeEvent(e) {
       : `Sign-in blocked (too many failures) from ${d.ip}`,
     login_unlocked: () => d.all || (d.args && d.args[0] === "all") ? `All sign-in locks cleared (${d.cleared})` : `Sign-in lock cleared: ${d.scope || (d.args || []).join(" ")} ${d.subject || ""}`,
     api_key_rejected: () => `Rejected API key from ${d.ip} (${d.path})` + (d.attempts_left != null ? ` – ${d.attempts_left} attempt(s) left` : ""),
+    password_changed: () => `Dashboard password changed from ${d.ip} – other browsers signed out`,
+    password_change_failed: () => `Password change refused from ${d.ip}: ${d.reason}` + (d.attempts_left != null ? ` – ${d.attempts_left} attempt(s) left` : ""),
     local_access: () => `Dashboard used without password from ${d.ip} (trusted network, ${d.level === "view" ? "view only" : "full control"})`,
     api_locked: () => `API KEYS LOCKED for ${d.minutes} min from ${d.ip} (lock #${d.level})`,
     startup: () => `Monitor started – v${d.version}, port ${d.port}`,

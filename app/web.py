@@ -4,7 +4,7 @@ from urllib.parse import urlparse
 from flask import Blueprint, current_app, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash
 
-from .auth import current_user, login_required, password_required
+from .auth import current_user, login_required, password_required, password_user, pw_fingerprint
 
 bp = Blueprint("web", __name__)
 
@@ -66,6 +66,7 @@ def login():
                 svc.lockouts.success(subjects)
                 session.clear()
                 session["user"] = cfg.WEB_USERNAME
+                session["pwv"] = pw_fingerprint(cfg)
                 session.permanent = True
                 nxt = request.args.get("next", "")
                 if not nxt.startswith("/") or nxt.startswith("//") or urlparse(nxt).netloc:
@@ -89,7 +90,7 @@ def login():
     note = None
     if request.args.get("why") == "settings":
         note = "Settings need a password sign-in, even on the local network."
-    local = current_user() if not session.get("user") else None
+    local = current_user() if not password_user() else None
     return render_template("login.html", error=error, note=note, local=local)
 
 

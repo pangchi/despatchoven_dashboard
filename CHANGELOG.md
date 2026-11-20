@@ -3,6 +3,22 @@
 All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semantic versioning.
 
+## [1.8.0] - 2026-11-20
+
+### Added
+- **Change password** card on the Settings page: current password plus the new one twice, live length and match
+  hints, and a Show toggle. The new hash is written to `.env` (backup kept) and applied immediately.
+- Changing the password **signs out every other browser**, while the one that made the change stays signed in
+  (each session stores a fingerprint of the password hash).
+- New-password rules: at least 8 characters, different from the current one, not the user name, not a repeated
+  character.
+- A wrong current password counts toward the sign-in lockout; locked attempts get `429`.
+- Events `password_changed` and `password_change_failed` (Access category).
+- API: `POST /api/v1/settings/password` (dashboard password session only).
+
+### Changed
+- Sessions created before 1.8.0 have no password fingerprint and must sign in once more after the update.
+
 ## [1.7.0] - 2026-11-20
 
 ### Added
