@@ -85,6 +85,18 @@ class Config:
         self.RETENTION_DAYS = _int("RETENTION_DAYS", 0)            # 0 = keep until disk pressure
 
         # --- Control safety ---
+        # --- Login security ---
+        self.LOCKOUT_ENABLED = _bool("LOCKOUT_ENABLED", True)
+        self.LOCKOUT_ATTEMPTS = _int("LOCKOUT_ATTEMPTS", 5)          # consecutive failures before a lock
+        self.LOCKOUT_MINUTES = _int("LOCKOUT_MINUTES", 2)            # first lock; doubles each time
+        self.LOCKOUT_MAX_MINUTES = _int("LOCKOUT_MAX_MINUTES", 60)
+        self.LOCKOUT_RESET_HOURS = _float("LOCKOUT_RESET_HOURS", 24.0)
+        self.TRUST_PROXY = _bool("TRUST_PROXY", False)               # true only behind nginx/caddy etc.
+        # Dashboard without password from these addresses: "localhost", CIDRs, single IPs (blank = off)
+        self.LOCAL_NETWORKS = os.getenv("LOCAL_NETWORKS", "").strip()
+        self.LOCAL_ACCESS = (os.getenv("LOCAL_ACCESS", "control").strip().lower() or "control")  # control | view
+        self.ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").strip()  # extra host names for passwordless access
+
         self.CONTROL_ENABLED = _bool("CONTROL_ENABLED", True)
         self.ALLOW_HIGH_LIMIT_WRITE = _bool("ALLOW_HIGH_LIMIT_WRITE", False)
         self.SETPOINT_MIN = _optfloat("SETPOINT_MIN")

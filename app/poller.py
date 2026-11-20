@@ -18,6 +18,8 @@ class Poller(threading.Thread):
         super().__init__(name="p3-poller", daemon=True)
         self.ctl, self.db, self.cfg = controller, db, cfg
         self.runs = runs
+        from .events import ProcessEventDetector
+        self.detector = ProcessEventDetector()
         self.stop_evt = threading.Event()
         self.state_lock = threading.Lock()
         self.latest = None          # last good snapshot (dict)
@@ -73,6 +75,7 @@ class Poller(threading.Thread):
         with self.state_lock:
             self.latest, self.comm_ok, self.comm_error = None, False, None
             self._prev_sig = None
+        self.detector.reset()
 
     def status(self):
         with self.state_lock:
@@ -157,6 +160,12 @@ class Poller(threading.Thread):
         s["hl_tripped"] = bool(int(s.get("hl_status", 0)) & 0x4)
         s["sensor_break"] = bool(s.get("sensor_break"))
         s["state"] = state
+        try:
+            for action, detail, severity in self.detector.check(s):
+                self.db_safe_event("controller", action, detail, ok=severity == "info", severity=severity)
+                log.log(logging.WARNING if severity != "info" else logging.INFO, "event %s %s", action, detail)
+        except Exception:
+            log.exception("event detection failed")
         try:
             s["run_id"] = self.runs.update(s) if self.runs else None
         except Exception:

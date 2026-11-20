@@ -255,7 +255,8 @@ class RunTracker:
             self._exec("UPDATE runs SET ended_at = %s, end_reason = %s, end_approx = %s, updated_at = now() WHERE id = %s",
                        (ended, reason, approx, run["id"]))
             log.info("Run %s ended: %s", run["id"], reason)
-            self.db.log_event("system", "run_ended", {"run": run["id"], "reason": reason}, ok=reason == "completed")
+            self.db.log_event("system", "run_ended", {"run": run["id"], "reason": reason},
+                              ok=not reason.startswith(("aborted", "error", "interrupted")))
         except Exception as e:
             log.warning("could not record run end: %s", e)
         run["closed_reason"] = reason

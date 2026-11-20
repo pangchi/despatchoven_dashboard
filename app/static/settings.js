@@ -93,6 +93,7 @@ function render(data) {
     const card = el("section", { className: "card", id: "sec_" + sec.id }, el("h2", { textContent: sec.title }), ...rows);
     if (sec.id === "serial") card.append(serialTools());
     if (sec.id === "db") card.append(dbTools());
+    if (sec.id === "security") card.append(lockTools());
     return card;
   });
   $("sections").replaceChildren(...out);
@@ -174,6 +175,37 @@ function dbTools() {
     } catch (e) { result(box, "err", "✗ " + e.message); }
   };
   return el("div", { className: "tools" }, el("div", { className: "btns" }, test), box);
+}
+
+function lockTools() {
+  const box = el("div", { className: "locks" });
+  const all = el("button", { className: "btn small", type: "button", textContent: "Unlock all" });
+  const head = el("div", { className: "card-hdr" }, el("h3", { textContent: "Current locks & failed attempts" }), all);
+  const scopeText = { user: "Account", ip: "Sign-in from", api: "API key from" };
+  const draw = (rows) => {
+    all.hidden = !rows.length;
+    if (!rows.length) { box.replaceChildren(head, el("p", { className: "muted", textContent: "No locks and no recent failed attempts." })); return; }
+    box.replaceChildren(head, ...rows.map((r) => {
+      const state = r.locked
+        ? el("span", { className: "tag bad", textContent: `locked · ${Math.ceil(r.seconds_left / 60)} min left` })
+        : el("span", { className: "tag warn", textContent: `${r.failures} failed` });
+      const btn = el("button", { className: "btn small", type: "button", textContent: r.locked ? "Unlock" : "Reset" });
+      btn.onclick = () => act({ scope: r.scope, subject: r.subject });
+      const when = r.last_failure ? new Date(r.last_failure).toLocaleString([], { dateStyle: "short", timeStyle: "short" }) : "";
+      return el("div", { className: "lockrow" },
+        el("span", { className: "muted", textContent: scopeText[r.scope] || r.scope }),
+        el("b", { textContent: r.subject }), state,
+        el("span", { className: "muted small", textContent: `level ${r.level} · last ${when}` }), btn);
+    }));
+  };
+  const load = () => api("/api/v1/settings/lockouts").then((d) => draw(d.lockouts)).catch((e) => box.replaceChildren(head, el("p", { className: "err", textContent: e.message })));
+  const act = async (body) => {
+    try { const d = await api("/api/v1/settings/lockouts/unlock", body); draw(d.lockouts); toast(`Cleared ${d.cleared}`, "ok"); }
+    catch (e) { toast("Unlock failed: " + e.message, "err"); }
+  };
+  all.onclick = () => { if (confirm("Clear all locks and failed-attempt counts?")) act({ all: true }); };
+  load(); setInterval(load, 15000);
+  return box;
 }
 
 // ---------------------------------------------------------------- save

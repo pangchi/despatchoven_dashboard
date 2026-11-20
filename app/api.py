@@ -2,7 +2,7 @@
 import logging
 from datetime import datetime, timedelta, timezone
 
-from flask import Blueprint, current_app, g, jsonify, request
+from flask import Blueprint, Response, current_app, g, jsonify, request
 
 from . import registers as R
 from .auth import api_auth
@@ -75,6 +75,10 @@ def _command(action, detail, fn):
     cfg = svc.cfg
     if not cfg.CONTROL_ENABLED:
         return jsonify(error="remote control disabled (CONTROL_ENABLED=false)"), 403
+    # mark before writing, so the poller does not log this change again as a front-panel change
+    kind = {"set_setpoint": "setpoint", "set_mode": "mode", "profile": "profile"}.get(action)
+    if kind:
+        svc.poller.detector.note_remote(kind)
     try:
         result = fn(svc.controller)
     except BadRequest as e:
@@ -129,18 +133,57 @@ def telemetry():
     return jsonify(start=start, end=end, count=len(rows), rows=rows)
 
 
+def _event_filters():
+    """Filters shared by /events and /events.csv."""
+    from .events import CATEGORIES, SEVERITIES
+    a = request.args
+
+    def when(name):
+        if not a.get(name):
+            return None
+        try:
+            d = datetime.fromisoformat(a[name])
+        except ValueError:
+            raise BadRequest(f"'{name}' must be ISO 8601, e.g. 2026-11-19T08:00:00+08:00")
+        return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+
+    def many(name, allowed):
+        vals = [v.strip() for v in (a.get(name) or "").split(",") if v.strip()]
+        bad = [v for v in vals if v not in allowed]
+        if bad:
+            raise BadRequest(f"unknown {name}: {', '.join(bad)} (use {', '.join(allowed)})")
+        return vals
+
+    return {"start": when("from"), "end": when("to"),
+            "categories": many("category", CATEGORIES), "severities": many("severity", SEVERITIES),
+            "source": (a.get("source") or "").strip()[:64] or None,
+            "action": (a.get("action") or "").strip()[:64] or None,
+            "q": (a.get("q") or "").strip()[:100] or None,
+            "failed_only": a.get("failed") in ("1", "true", "yes")}
+
+
 @bp.get("/events")
 @api_auth
 def events():
+    from . import events as EV
     try:
         limit = max(1, min(int(request.args.get("limit", 100)), 1000))
-        start = datetime.fromisoformat(request.args["from"]) if request.args.get("from") else None
-        end = datetime.fromisoformat(request.args["to"]) if request.args.get("to") else None
+        offset = max(0, int(request.args.get("offset", 0)))
     except ValueError:
-        raise BadRequest("use ?limit=N&from=ISO8601&to=ISO8601")
-    start = start.replace(tzinfo=timezone.utc) if start and not start.tzinfo else start
-    end = end.replace(tzinfo=timezone.utc) if end and not end.tzinfo else end
-    return jsonify(events=_svc().db.events(limit, start, end))
+        raise BadRequest("limit and offset must be whole numbers")
+    f = _event_filters()
+    total, rows = EV.query(_svc().db, f, limit, offset, with_total=True)
+    return jsonify(total=total, events=rows, counts=EV.counts(_svc().db, f))
+
+
+@bp.get("/events.csv")
+@api_auth
+def events_csv():
+    from . import events as EV
+    f = _event_filters()
+    name = f"events_{datetime.now():%Y%m%d-%H%M}.csv"
+    return Response(EV.iter_csv(_svc().db, f), mimetype="text/csv",
+                    headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
 
 @bp.get("/system")

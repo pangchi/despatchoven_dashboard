@@ -5,17 +5,17 @@
 <title>Protocol 3 Monitor</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body>
+<body class="{% if who and who.level == 'view' %}viewonly{% endif %}">
 <header>
   <div class="brand">Protocol 3 Monitor{% if cfg.simulator %} <span class="tag warn">SIMULATOR</span>{% endif %}</div>
   <div class="hdr-right">
     <span id="conn" class="tag">connecting…</span>
     <span id="dbtag" class="tag">DB</span>
     <a class="btn small" href="{{ url_for('web.runs_page') }}">Runs</a>
+    <a class="btn small" href="{{ url_for('web.events_page') }}">Events</a>
     <a class="btn small" href="{{ url_for('web.settings_page') }}">Settings</a>
     <span class="ver" title="Protocol 3 Monitor version">v{{ app_version }}</span>
-    <span class="muted">{{ user }}</span>
-    <form method="post" action="{{ url_for('web.logout') }}"><button class="btn small">Sign out</button></form>
+    {% include "_userbox.html" %}
   </div>
 </header>
 
@@ -37,7 +37,7 @@
         <div class="lbl">Run</div>
         <div class="runline" id="runline">–</div>
       </div>
-      <form class="labelform" id="labelform">
+      <form class="labelform control-only" id="labelform">
         <label for="runlabel" id="runlabel-lbl">Label for next run</label>
         <input id="runlabel" maxlength="100" placeholder="lot / batch / job no.">
         <button class="btn" type="submit">Set</button>
@@ -61,6 +61,8 @@
   <section class="grid2">
     <div class="card">
       <h2>Control</h2>
+      <p class="viewonly-note">View only from this network. <a href="{{ url_for('web.login', next='/') }}">Sign in</a> to control the oven.</p>
+      <div class="control-only">
       {% if not cfg.CONTROL_ENABLED %}<p class="err">Remote control is disabled (CONTROL_ENABLED=false).</p>{% endif %}
       <div class="row">
         <label>Mode</label>
@@ -104,13 +106,14 @@
         <input id="hlin" type="number" step="0.1"><button class="btn danger" id="hlset">Set</button>
       </div>
       {% endif %}
+      </div>
       <p id="msg" class="msg"></p>
     </div>
 
     <div class="card">
       <h2>System</h2>
       <dl class="kv" id="sys"></dl>
-      <h2>Recent events</h2>
+      <div class="card-hdr"><h2>Recent events</h2><a class="btn small" href="{{ url_for('web.events_page') }}">Event log →</a></div>
       <div class="events" id="events"></div>
     </div>
   </section>

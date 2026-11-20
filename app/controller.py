@@ -144,6 +144,7 @@ class SimulatedController(_Base):
         self.last = time.monotonic()
         self.profile_t0 = None
         self.segment_s = float(os.getenv("P3_SIM_SEGMENT_S", "120"))
+        self.alarm1_above = float(os.getenv("P3_SIM_ALARM1", "1e9"))   # demo: alarm 1 = PV above this
         b = lambda r, v: self.regs.__setitem__(r.address, r.encode(v))
         b(R.READ_MAP["manual_sp"], 100.0)
         b(R.READ_MAP["hl_alarm_value"], 250.0)
@@ -206,6 +207,7 @@ class SimulatedController(_Base):
         self._set("hl_pv", self.pv + random.uniform(-0.3, 0.3))
         self._set("power", int(power))
         self._set("hl_status", 4 if hl_tripped else 0)
+        self.regs[R.ALARM_STATUS[1]] = 1 if self.pv > self.alarm1_above else 0
         self._set("relay_bits", sum(1 << (i - 1) for i, r in R.MANUAL_RELAYS.items() if self.regs.get(r.address)))
 
     def _read_raw(self, address, signed):

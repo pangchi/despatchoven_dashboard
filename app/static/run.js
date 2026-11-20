@@ -74,13 +74,7 @@ async function loadEvents(start, end) {
     const p = new URLSearchParams({ limit: 200, from: new Date(+start - 60000).toISOString() });
     if (end) p.set("to", new Date(+end + 60000).toISOString());
     const { events } = await call("/api/v1/events?" + p);
-    $("events").replaceChildren(...(events.length ? events.reverse().map((e) => {
-      const div = document.createElement("div");
-      if (!e.ok) div.className = "bad";
-      const det = e.detail ? " " + JSON.stringify(e.detail) : "";
-      div.textContent = `${new Date(e.ts).toLocaleTimeString()} · ${e.source} · ${e.action}${det}`;
-      return div;
-    }) : [Object.assign(document.createElement("span"), { className: "muted", textContent: "No events." })]));
+    $("events").replaceChildren(...(events.length ? events.reverse().map((e) => eventRow(e, { timeOnly: true })) : [Object.assign(document.createElement("span"), { className: "muted", textContent: "No events." })]));
   } catch (e) { $("events").textContent = e.message; }
 }
 

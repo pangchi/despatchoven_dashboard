@@ -97,10 +97,14 @@ class Database:
         return _PooledConn(self.pool)
 
     def init_schema(self):
+        from .events import SCHEMA as EVENTS_SCHEMA
+        from .lockout import SCHEMA as LOCKOUT_SCHEMA
         from .runs import SCHEMA as RUNS_SCHEMA
         with self._conn() as conn, conn.cursor() as cur:
             cur.execute(SCHEMA)
             cur.execute(RUNS_SCHEMA)
+            cur.execute(EVENTS_SCHEMA)
+            cur.execute(LOCKOUT_SCHEMA)
         self.ensure_partitions()
 
     # ---------- partitions ----------
@@ -152,11 +156,14 @@ class Database:
         with self._conn() as conn, conn.cursor() as cur:
             cur.execute(f"INSERT INTO telemetry ({','.join(COLUMNS)}) VALUES ({','.join(['%s'] * len(COLUMNS))})", vals)
 
-    def log_event(self, source, action, detail=None, ok=True):
+    def log_event(self, source, action, detail=None, ok=True, severity=None, category=None):
+        from .events import classify
+        category, severity = classify(action, ok, category, severity)
         try:
             with self._conn() as conn, conn.cursor() as cur:
-                cur.execute("INSERT INTO events (source, action, detail, ok) VALUES (%s,%s,%s,%s)",
-                            (source, action, json.dumps(detail, default=str) if detail is not None else None, ok))
+                cur.execute("INSERT INTO events (source, action, detail, ok, category, severity) VALUES (%s,%s,%s,%s,%s,%s)",
+                            (source, action, json.dumps(detail, default=str) if detail is not None else None, ok,
+                             category, severity))
         except Exception:
             log.exception("failed to log event %s", action)
 
@@ -194,7 +201,7 @@ class Database:
             where.append("ts <= %s"); args.append(end)
         w = ("WHERE " + " AND ".join(where)) if where else ""
         with self._conn() as conn, conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute(f"SELECT id, ts, source, action, detail, ok FROM events {w} ORDER BY ts DESC LIMIT %s",
+            cur.execute(f"SELECT id, ts, category, severity, source, action, detail, ok FROM events {w} ORDER BY ts DESC LIMIT %s",
                         args + [limit])
             return cur.fetchall()
 

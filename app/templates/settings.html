@@ -5,14 +5,13 @@
 <title>Protocol 3 Monitor · Settings</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body>
+<body class="{% if who and who.level == 'view' %}viewonly{% endif %}">
 <header>
   <div class="brand"><a href="{{ url_for('web.index') }}" class="back">← Dashboard</a> Settings</div>
   <div class="hdr-right">
     <span id="conn" class="tag">…</span>
     <span class="ver" title="Protocol 3 Monitor version">v{{ app_version }}</span>
-    <span class="muted">{{ user }}</span>
-    <form method="post" action="{{ url_for('web.logout') }}"><button class="btn small">Sign out</button></form>
+    {% include "_userbox.html" %}
   </div>
 </header>
 

@@ -8,7 +8,9 @@
 <body class="login-page">
 <form class="card login" method="post">
   <h1>Protocol 3 Monitor</h1>
+  {% if note %}<p class="note">{{ note }}</p>{% endif %}
   {% if error %}<p class="err">{{ error }}</p>{% endif %}
+  {% if local %}<p class="note">This address is on a trusted network: you can <a href="{{ url_for('web.index') }}">use the dashboard without a password</a>{% if local.level == 'view' %} (view only){% endif %}.</p>{% endif %}
   <label>Username <input name="username" autocomplete="username" required autofocus></label>
   <label>Password <input name="password" type="password" autocomplete="current-password" required></label>
   <button class="btn primary" type="submit">Sign in</button>

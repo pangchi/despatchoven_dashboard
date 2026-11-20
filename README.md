@@ -17,7 +17,7 @@ Protocol 3 ──RS-485 (term. 19/20/21)── USB-RS485 adapter ── Raspberr
 - Control: mode select, setpoint, manual start/stop, timer start/stop, profile run/hold/release/next/abort, manual relays 1-4, optional high-limit value.
 - **Adaptive logging**: every `LOG_INTERVAL_ACTIVE` s (default 5) while a process runs, every `LOG_INTERVAL_IDLE` s (default 60) when idle, plus an immediate row on any state change (mode, run status, segment, relays, alarms, high-limit trip, sensor break).
 - **Disk auto-purge**: when the filesystem passes `PURGE_THRESHOLD_PCT` (80 %), the oldest days are dropped until usage is at `PURGE_TARGET_PCT` (75 %). Optional `RETENTION_DAYS`.
-- Audit log of every control command, login, purge and comm loss/restore (`events` table, visible on the dashboard).
+- **Event log** page: alarms, high-limit trips, sensor breaks and front-panel changes detected from the controller, plus every remote command, run, settings change, sign-in and system event. Each has a category and severity, and the page has filters, search, live updates and CSV export.
 - **Run log**: every profile, manual and timer run is recorded with its start, end, result (completed / aborted / stopped …), profile number, lot label, notes and summary stats. It has its own chart, with profile segments and holds marked, plus a CSV export.
 - **Settings page** in the dashboard: serial/Modbus connection with *Test connection* and *Auto-detect baud / parity*, database with *Test database*, sampling, purge and control limits. Saved to `.env` and applied live, with no restart.
 - Starts even when the database is unreachable, so you can fix it from Settings; it reconnects every 30 s on its own.
@@ -153,6 +153,96 @@ venv/bin/python wsgi.py
 venv/bin/pytest -q
 ```
 
+## Login security (lock after failed attempts)
+
+Sign-in and API keys lock after **consecutive failed attempts**:
+
+| What is counted | Locks | Why |
+|---|---|---|
+| The dashboard **account** (`WEB_USERNAME`) | sign-in to that account from anywhere | stops password guessing spread over many machines |
+| The **address** signing in | sign-in from that address, any username | stops one machine trying names and passwords |
+| The **address** using API keys | API-key requests from that address (HTTP `429` + `Retry-After`) | kept separate, so a script with an old key can't lock the operator out of the dashboard |
+
+**How locks work:**
+- **Trigger:** after `LOCKOUT_ATTEMPTS` (default **5**) failures in a row, the account or address is locked.
+- **Duration:** the first lock lasts `LOCKOUT_MINUTES` (default **2**), and each further lock doubles (2 → 4 → 8 → 16 …) up to `LOCKOUT_MAX_MINUTES` (default **60**).
+- **Reset:** a successful sign-in resets the count. After `LOCKOUT_RESET_HOURS` (default **24**) without failures, the count and lock level fall back to zero.
+- **While locked:** the password isn't checked at all, and the login page shows *"Sign-in is locked for N minutes"*. With 2 or fewer attempts left it warns *"N attempts left before sign-in is locked"*.
+- **Restarts:** locks are stored in PostgreSQL (`auth_lockouts`), so a restart doesn't clear them. If the database is down, they're kept in memory until it's back.
+- **Wrong usernames:** the password check always runs, so response time doesn't reveal whether a username exists. Wrong usernames count against the address only.
+- **Already signed in:** a dashboard session that is already signed in keeps working even if its address is locked for API keys.
+
+**Real client address:** `X-Real-IP` / `X-Forwarded-For` headers are **ignored** unless `TRUST_PROXY=true`. Without that, anyone could send a fake address with every attempt and never be locked. Turn it on only when nginx, Caddy or similar sits in front of the app and sets those headers.
+
+**Seeing and clearing locks:**
+- **Settings → Login security** shows current locks and addresses with failed attempts, with **Unlock** / **Reset** buttons and **Unlock all**. The limits can be changed there too.
+- **Locked yourself out?** On the Pi:
+  ```bash
+  cd /opt/oven-dashboard
+  sudo -u <service-user> venv/bin/python -m app.tools lockouts            # list
+  sudo -u <service-user> venv/bin/python -m app.tools unlock user admin   # or: unlock ip 192.168.1.20 / unlock all
+  ```
+- **Event log:** every failure, lock (as an **alarm**) and unlock goes into the Event log under *Access*.
+
+Note: someone who knows your username can keep the **account** locked by failing on purpose. That's the price of stopping guessing spread over many machines. If that happens, check the Event log for the address and unlock from the Pi.
+
+## No password on the local network (optional)
+
+The dashboard can open **without a password** from addresses you trust, such as a screen on the Pi itself or PCs on the workshop LAN. It is **off by default**. Turn it on in **Settings → Login security**, or in `.env`:
+
+| Setting | Example | Meaning |
+|---|---|---|
+| `LOCAL_NETWORKS` (*No password from*) | `localhost` | Only a browser on the Pi itself (kiosk / touchscreen) |
+| | `localhost, 192.168.1.0/24` | The Pi and the whole workshop LAN |
+| | `192.168.1.20, 192.168.1.21` | Specific PCs |
+| `LOCAL_ACCESS` (*Without password, allow*) | `control` (default) / `view` | `view` = watch only: control panel and label editing hidden, commands refused |
+| `ALLOWED_HOSTS` (*Extra host names*) | `oven.lan` | Names besides IP / `localhost` / the Pi's own name that you type in the browser |
+
+**What passwordless users see:**
+- **Header:** a green **Local · 192.168.1.20** badge (plus *view only* if set) and a **Sign in** button. Signing in with the password gives full control as usual.
+- **Settings:** always need the password, so a passwordless user cannot widen access, switch off the lockout, or change the database.
+- **Audit trail:** commands are logged as `local:<address>`, and each address's first visit per hour is logged (*Access* category).
+- **API clients:** still need an API key. Requests without a key are only accepted when they come from a browser on a trusted address, because of the browser-only header check below.
+
+**Built-in safeguards:**
+- **Reverse-proxy guard:** a request that carries `X-Forwarded-For` / `X-Real-IP` is **never** treated as local unless *Behind a reverse proxy* (`TRUST_PROXY`) is on. Otherwise a proxy on the Pi would make every outside visitor look like `localhost`. With `TRUST_PROXY=true`, the address the proxy reports is used.
+- **Host check (DNS rebinding):** passwordless access only works when the page is opened by IP address, `localhost`, the Pi's hostname (also `.local`) or a name in `ALLOWED_HOSTS`. This stops a malicious website from pointing its own domain at the Pi and controlling it through a workshop browser.
+- **Cross-site requests:** commands still need the dashboard's `X-Requested-With` header, which another website's page cannot send to the Pi.
+- **Whole-internet ranges refused:** `0.0.0.0/0` and `::/0` are rejected.
+
+Recommendation: use `localhost` for a touchscreen on the Pi. For the LAN, prefer `LOCAL_ACCESS=view`, so anyone on the workshop Wi-Fi can watch but starting the oven still needs the password.
+
+## Event log
+
+**Event log** (`/events`, linked from the dashboard header and its *Recent events* panel) is the complete history of what happened to the oven and the monitor.
+
+| Category | Events | Source |
+|---|---|---|
+| **Process** | Alarm 1–5 active / cleared · **high limit tripped** / reset · control or high-limit thermocouple open / OK · mode, setpoint and profile hold/resume **changed at the controller** · profile segment changes | `controller` |
+| **Control** | Every remote command: setpoint, mode, manual/timer/profile, relays, high limit (failures included, with the reason) | `api:<key>` / `web:<user>` |
+| **Run** | Run started / ended (with result), label and notes edits, next-run label | `system`, user |
+| **Settings** | Settings saved (DB password masked), connection tests, auto-detect | `web:<user>` |
+| **Access** | Sign-in, sign-out, **failed sign-in** (username tried, IP, attempts left), **sign-in / API locked** (what, how long, lock number), unlocks, **rejected API key** (IP and path; the key itself is never stored) | `web`, `api`, `cli` |
+| **System** | Monitor started (with version), controller communication lost / restored, database connected, purges | `system` |
+
+**Severity:** `alarm` (red) for high-limit trips, thermocouple breaks and blocked sign-ins; `warning` (amber) for alarms, comm loss, failed commands, failed sign-ins, and aborted, error or interrupted runs; `info` for everything else.
+
+How process events are detected:
+- They come from comparing each controller reading with the one before. Anything already abnormal when the monitor starts (an active alarm, a tripped high limit) is logged once, marked *already active when monitoring started*.
+- Changes made through this app's API or dashboard are logged once, as the command, and are not repeated as "changed at the controller".
+- If communication drops, the next reading is compared with the last one before the gap, so a change made in between is still logged.
+- Note: a change that happens and reverses entirely within one poll interval (default 2 s) cannot be seen.
+
+The page:
+- **Filtering:** severity chips with counts (All / Alarms / Warnings / Info), category chips, text search (event, source and details, e.g. an IP or alarm number), source, a date/time range, and *Failures only*.
+- **Rows:** click a row to see the raw event detail; run events link to the run.
+- **Live:** new events appear every 5 s and are briefly highlighted.
+- **Shareable views:** filters are kept in the URL, so a filtered view (e.g. `/events?severity=alarm`) can be bookmarked.
+- **CSV:** **Download CSV** exports the current filter (up to 200 000 rows).
+- **Phone:** each event becomes a stacked card.
+
+Events are stored in the `events` table and purged together with telemetry when the disk fills. The upgrade from v1.4 adds `category` and `severity` columns and fills them in for existing events.
+
 ## Runs (per-run logging)
 
 A **run** is one process from start to stop:
@@ -190,6 +280,7 @@ Open **Settings** (top right of the dashboard, or `http://<pi>:8000/settings`). 
 | Database | Host, port, name, user, password (blank = keep) | **Test database** shows server version, whether tables exist and whether the user may create them |
 | Sampling & logging | Live poll, active/idle log rates, active-above-PV threshold, hold-off | |
 | Storage & purge | Purge start/stop %, retention days, check interval, disk to watch | |
+| Login security | Lock on/off, attempts before lock, first and longest lock, forget-after hours, **no password from** (networks), **without password allow** (control/view), extra host names, behind a reverse proxy | List of current locks with **Unlock** / **Reset**, **Unlock all** |
 | Control & safety | Remote control on/off, setpoint min/max clamp, log level | |
 
 How saving works:
@@ -242,14 +333,15 @@ All credentials live in `.env` (`chmod 600`, excluded by `.gitignore`); `.env.ex
 
 ## REST API (`/api/v1`)
 
-Authenticate with `X-API-Key: <key>` or `Authorization: Bearer <key>`. Responses are JSON. After 10 failed key/login attempts in 5 minutes an IP gets `429`. Expose the Pi beyond the LAN only behind HTTPS (reverse proxy or VPN, e.g. Tailscale/WireGuard) – keys are sent in a header.
+Authenticate with `X-API-Key: <key>` or `Authorization: Bearer <key>`. Responses are JSON. After `LOCKOUT_ATTEMPTS` consecutive bad keys an address gets `429` with `Retry-After` (see [Login security](#login-security-lock-after-failed-attempts)). Expose the Pi beyond the LAN only behind HTTPS (reverse proxy or VPN, e.g. Tailscale/WireGuard) – keys are sent in a header.
 
 | Method & path | Body | Notes |
 |---|---|---|
 | `GET /health` | – | No auth. `{ok, comm_ok, db_ok}` for uptime checks |
 | `GET /status` | – | Live snapshot, comm/DB state, logging state |
 | `GET /telemetry?minutes=60` or `?from=ISO&to=ISO` | – | Optional `max_points` (default 1500, max 20000) |
-| `GET /events?limit=100` | – | Audit log |
+| `GET /events?limit=100&offset=0` | – | Event log, newest first; returns `total` and `counts` per severity. Filters: `category` and `severity` (comma lists), `source`, `action`, `q` (text search incl. details), `from`, `to`, `failed=1` |
+| `GET /events.csv` | – | Same filters, as CSV |
 | `GET /system` | – | Disk, DB size, retention, last purge |
 | `POST /system/purge` | – | Run the purge check now |
 | `POST /control/mode` | `{"mode":"manual"\|"timer"\|"profile"\|"select"}` | Refused while a process is running |
@@ -272,7 +364,7 @@ Runs endpoints (API key or dashboard login):
 | `GET /runs/<id>/telemetry?max_points=2000` | – | Samples of the run, averaged into buckets if more |
 | `GET /runs/<id>.csv` | – | All samples as CSV (streamed) |
 
-`POST /control/manual`, `/control/timer` and `/control/profile` accept an optional `"label"` on start / run. `GET /events` also takes `from` / `to`.
+`POST /control/manual`, `/control/timer` and `/control/profile` accept an optional `"label"` on start / run. 
 
 Settings endpoints (**dashboard login only**, API keys get `401`; writes need `X-Requested-With: p3-dashboard`):
 
@@ -281,6 +373,8 @@ Settings endpoints (**dashboard login only**, API keys get `401`; writes need `X
 | `GET /settings` | – | Field definitions + current values (DB password never returned) |
 | `POST /settings` | `{"SERIAL_BAUD":9600, ...}` | Validate, write `.env`, apply live; returns changed keys |
 | `GET /settings/serial-ports` | – | Detected adapters |
+| `GET /settings/lockouts` | – | Current locks and failed-attempt counts |
+| `POST /settings/lockouts/unlock` | `{"scope":"ip","subject":"1.2.3.4"}` or `{"all":true}` | Clear a lock (scope `user`, `ip` or `api`) |
 | `POST /settings/test-serial` | serial fields (optional) | Test with these values, current ones for anything omitted |
 | `POST /settings/detect-serial` | `SERIAL_PORT`, `MODBUS_ADDRESS` (optional) | Baud/parity scan |
 | `POST /settings/test-db` | DB fields (optional) | Connection test |
@@ -322,6 +416,9 @@ app/
   settings_api.py settings endpoints + live apply
   runs.py         run tracking (start/end detection, stats, queries)
   runs_api.py     runs endpoints, CSV export
+  events.py       event categories/severity, queries, CSV, process-event detection
+  lockout.py      lock after failed sign-ins / API keys, client address, local-network matching
+  templates/_userbox.html  header user / local badge
   web.py          login + dashboard routes
   tools.py        gen-secret, gen-key, hash-password, test-connection
   templates/, static/

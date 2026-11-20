@@ -5,6 +5,9 @@
   python -m app.tools hash-password     -> WEB_PASSWORD_HASH value (prompts)
   python -m app.tools test-connection   -> read the controller once using .env settings
   python -m app.tools version           -> print the app version
+  python -m app.tools lockouts          -> list sign-in locks and failed attempts
+  python -m app.tools unlock [all | user <name> | ip <addr> | api <addr>]
+                                        -> clear locks (e.g. if you locked yourself out)
 """
 import getpass
 import json
@@ -17,6 +20,31 @@ def main(argv):
     if cmd in ("version", "--version", "-V"):
         from . import __version__
         print(__version__)
+    elif cmd in ("lockouts", "unlock"):
+        from .config import Config
+        from .db import Database
+        from .lockout import SCOPES, Lockouts
+        cfg = Config()
+        db = Database(cfg)
+        db.connect()
+        lk = Lockouts(db, cfg)
+        if cmd == "lockouts":
+            rows = lk.active()
+            if not rows:
+                print("No locks and no recent failed attempts.")
+            for r in rows:
+                state = f"LOCKED {r['seconds_left'] // 60 + 1} min left" if r["locked"] else f"{r['failures']} failed"
+                print(f"{r['scope']:5} {r['subject']:40} {state:22} level {r['level']}  last {r['last_failure']}")
+        else:
+            args = argv[2:]
+            if not args or args == ["all"]:
+                n = lk.unlock()
+            elif len(args) == 2 and args[0] in SCOPES:
+                n = lk.unlock(args[0], args[1])
+            else:
+                sys.exit("usage: python -m app.tools unlock [all | user <name> | ip <addr> | api <addr>]")
+            db.log_event("cli", "login_unlocked", {"args": args or ["all"], "cleared": n})
+            print(f"Cleared {n} entr{'y' if n == 1 else 'ies'}.")
     elif cmd == "gen-secret":
         print(secrets.token_hex(32))
     elif cmd == "gen-key":

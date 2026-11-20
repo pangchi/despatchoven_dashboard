@@ -135,7 +135,8 @@ def save_settings():
         if new_db:
             new_db.cfg = cfg
             old_db = svc.db
-            svc.db = svc.poller.db = new_db
+            svc.db = svc.poller.db = svc.lockouts.db = new_db
+            svc.lockouts._dirty = None
             with svc.runs.lock:
                 svc.runs.db, svc.runs._loaded = new_db, False   # re-read the open run from the new DB
             try:
@@ -149,3 +150,29 @@ def save_settings():
         svc.db.log_event(g.actor, "settings_saved", detail)
         log.info("%s changed settings: %s", g.actor, ", ".join(changes))
         return jsonify(ok=True, changed=sorted(changes), settings=S.describe(cfg))
+
+
+# ---------------------------------------------------------------- login locks
+@bp.get("/lockouts")
+@session_api
+def lockouts():
+    return jsonify(lockouts=_svc().lockouts.active())
+
+
+@bp.post("/lockouts/unlock")
+@session_api
+def unlock():
+    from .lockout import SCOPES
+    data = _json()
+    svc = _svc()
+    if data.get("all") is True:
+        n = svc.lockouts.unlock()
+        detail = {"all": True}
+    else:
+        scope, subject = data.get("scope"), data.get("subject")
+        if scope not in SCOPES or not isinstance(subject, str) or not subject or len(subject) > 64:
+            raise S.SettingsError("give scope (user/ip/api) and subject, or all: true")
+        n = svc.lockouts.unlock(scope, subject)
+        detail = {"scope": scope, "subject": subject}
+    svc.db.log_event(g.actor, "login_unlocked", {**detail, "cleared": n})
+    return jsonify(cleared=n, lockouts=svc.lockouts.active())

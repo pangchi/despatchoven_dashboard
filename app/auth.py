@@ -1,31 +1,12 @@
 """Authentication: API keys for remote clients, session login for the web UI."""
 import functools
 import hmac
-import time
-from collections import defaultdict, deque
 
 from flask import current_app, g, jsonify, redirect, request, session, url_for
 
-# simple in-memory throttle for failed auth attempts (per client IP)
-_FAILS = defaultdict(deque)
-FAIL_WINDOW = 300
-FAIL_LIMIT = 10
-
-
 def _client_ip():
-    return request.headers.get("X-Real-IP") or request.remote_addr or "?"
-
-
-def throttled():
-    q = _FAILS[_client_ip()]
-    now = time.time()
-    while q and now - q[0] > FAIL_WINDOW:
-        q.popleft()
-    return len(q) >= FAIL_LIMIT
-
-
-def note_failure():
-    _FAILS[_client_ip()].append(time.time())
+    from .lockout import client_ip
+    return client_ip(request, current_app.config["P3"])
 
 
 def match_api_key(presented):
@@ -53,30 +34,102 @@ def api_auth(fn):
 
     @functools.wraps(fn)
     def wrapper(*a, **kw):
-        if throttled():
-            return jsonify(error="too many failed attempts, try later"), 429
-        name = match_api_key(_presented_key())
-        if name:
-            g.actor = f"api:{name}"
-            return fn(*a, **kw)
-        if session.get("user"):
-            # CSRF guard for cookie-authenticated state-changing requests
+        key = _presented_key()
+        if key:
+            from .lockout import fmt_wait
+            svc = current_app.extensions["p3"]
+            ip = _client_ip()
+            locked = svc.lockouts.check([("api", ip)])
+            if locked:
+                resp = jsonify(error=f"too many failed API key attempts from {ip} - locked for {fmt_wait(locked[2])}")
+                resp.headers["Retry-After"] = str(locked[2])
+                return resp, 429
+            name = match_api_key(key)
+            if name:
+                svc.lockouts.success([("api", ip)])
+                g.actor = f"api:{name}"
+                return fn(*a, **kw)
+            res = svc.lockouts.failure([("api", ip)])
+            try:   # the key itself is never logged
+                svc.db.log_event("api", "api_key_rejected",
+                                 {"ip": ip, "path": request.path, "attempts_left": res["remaining"]}, ok=False)
+                for scope, subject, minutes, level in res["locked"]:
+                    svc.db.log_event("api", "api_locked", {"ip": subject, "minutes": minutes, "level": level}, ok=False)
+            except Exception:
+                pass
+            return jsonify(error="unauthorized - invalid API key"), 401
+        user = current_user()
+        if user:
+            # CSRF guard for browser (cookie or local-network) state-changing requests: a custom header
+            # cannot be sent cross-site without a CORS preflight, which this app never grants
             if request.method not in ("GET", "HEAD") and request.headers.get("X-Requested-With") != "p3-dashboard":
                 return jsonify(error="missing X-Requested-With header"), 403
-            g.actor = f"web:{session['user']}"
+            if request.method not in ("GET", "HEAD") and user["level"] == "view":
+                return jsonify(error="view-only access from this network - sign in with the password to control"), 403
+            g.actor, g.user = user["name"], user
             return fn(*a, **kw)
-        if _presented_key():
-            note_failure()
         return jsonify(error="unauthorized - send X-API-Key header"), 401
 
     return wrapper
 
 
+_LOCAL_SEEN = {}          # ip -> time of the last "local_access" event (one per hour per address)
+
+
+def local_identity():
+    """Passwordless identity for a request from a trusted local network, or None."""
+    import time
+    from .lockout import host_allowed, ip_in_networks, parse_networks
+    cfg = current_app.config["P3"]
+    if not cfg.LOCAL_NETWORKS:
+        return None
+    if not cfg.TRUST_PROXY and (request.headers.get("X-Forwarded-For") or request.headers.get("X-Real-IP")):
+        return None           # a proxy is forwarding outside traffic: 127.0.0.1 would match everyone
+    try:
+        nets = parse_networks(cfg.LOCAL_NETWORKS)
+    except ValueError:
+        return None
+    ip = _client_ip()
+    if not ip_in_networks(ip, nets) or not host_allowed(request.host, cfg):
+        return None
+    level = "view" if cfg.LOCAL_ACCESS == "view" else "control"
+    now = time.time()
+    if now - _LOCAL_SEEN.get(ip, 0) > 3600:
+        _LOCAL_SEEN[ip] = now
+        try:
+            current_app.extensions["p3"].db.log_event(f"local:{ip}", "local_access",
+                                                      {"ip": ip, "level": level, "path": request.path})
+        except Exception:
+            pass
+    return {"name": f"local:{ip}", "label": f"Local · {ip}", "kind": "local", "level": level, "ip": ip}
+
+
+def current_user():
+    """Who is making this request: a password session, a passwordless local user, or None."""
+    if session.get("user"):
+        return {"name": f"web:{session['user']}", "label": session["user"], "kind": "password", "level": "control"}
+    return local_identity()
+
+
 def login_required(fn):
+    """Page for a signed-in user or a passwordless local user."""
     @functools.wraps(fn)
     def wrapper(*a, **kw):
-        if not session.get("user"):
+        g.user = current_user()
+        if not g.user:
             return redirect(url_for("web.login", next=request.path))
+        return fn(*a, **kw)
+
+    return wrapper
+
+
+def password_required(fn):
+    """Page that always needs a password sign-in (Settings), even on a trusted network."""
+    @functools.wraps(fn)
+    def wrapper(*a, **kw):
+        g.user = current_user()
+        if not g.user or g.user["kind"] != "password":
+            return redirect(url_for("web.login", next=request.path, why="settings" if g.user else None))
         return fn(*a, **kw)
 
     return wrapper

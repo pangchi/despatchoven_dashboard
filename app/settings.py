@@ -44,6 +44,15 @@ FIELDS = [
     ("PURGE_CHECK_INTERVAL", "storage", "Check every (s)", "float", {"min": 30, "max": 86400, "step": 30}, ""),
     ("DISK_CHECK_PATH", "storage", "Disk to watch", "str", {"max_len": 255, "required": True}, "Filesystem holding the PostgreSQL data."),
 
+    ("LOCKOUT_ENABLED", "security", "Lock after failed sign-ins", "bool", {}, "Lock sign-in after consecutive failures (per account and per address; API keys per address)."),
+    ("LOCKOUT_ATTEMPTS", "security", "Failed attempts before lock", "int", {"min": 1, "max": 50}, "Consecutive failures. A successful sign-in resets the count."),
+    ("LOCKOUT_MINUTES", "security", "First lock (minutes)", "int", {"min": 1, "max": 1440}, "Each further lock doubles: e.g. 2, 4, 8, 16 … minutes."),
+    ("LOCKOUT_MAX_MINUTES", "security", "Longest lock (minutes)", "int", {"min": 1, "max": 10080}, "Upper limit for the doubling."),
+    ("LOCKOUT_RESET_HOURS", "security", "Forget failures after (hours)", "float", {"min": 0.1, "max": 720, "step": 0.5}, "Lock level and failure count fall back to zero after this long without failures."),
+    ("LOCAL_NETWORKS", "security", "No password from", "str", {"max_len": 500}, "Dashboard without password from these addresses: localhost (the Pi itself), networks like 192.168.1.0/24, or single IPs, comma-separated. Blank = always ask for the password. Settings always need the password."),
+    ("LOCAL_ACCESS", "security", "Without password, allow", "choice", {"options": ["control", "view"]}, "control = full oven control; view = watch only (control panel hidden, commands refused)."),
+    ("ALLOWED_HOSTS", "security", "Extra host names", "str", {"max_len": 255}, "Passwordless access works when the page is opened by IP, localhost or this Pi's own name. Add other names you use (e.g. oven.lan), comma-separated."),
+    ("TRUST_PROXY", "security", "Behind a reverse proxy", "bool", {}, "Turn on ONLY if nginx/Caddy/etc. in front of this app sets X-Real-IP / X-Forwarded-For. Otherwise clients could fake their address to dodge the lock."),
     ("CONTROL_ENABLED", "control", "Remote control enabled", "bool", {}, "Off = monitor only; all control commands are refused."),
     ("SETPOINT_MIN", "control", "Setpoint min", "optfloat", {"min": -200, "max": 2000, "step": 1}, "Extra limit on top of the controller's own SP min. Blank = controller limit only."),
     ("SETPOINT_MAX", "control", "Setpoint max", "optfloat", {"min": -200, "max": 2000, "step": 1}, "Blank = controller limit only."),
@@ -54,6 +63,7 @@ SECTIONS = [
     ("db", "Database (PostgreSQL)"),
     ("sampling", "Sampling & logging"),
     ("storage", "Storage & purge"),
+    ("security", "Login security"),
     ("control", "Control & safety"),
 ]
 FIELD = {f[0]: f for f in FIELDS}
@@ -163,6 +173,22 @@ def validate(cfg, data):
     lo, hi = merged("SETPOINT_MIN"), merged("SETPOINT_MAX")
     if lo is not None and hi is not None and lo >= hi:
         raise SettingsError("Setpoint min must be below setpoint max")
+    if "LOCAL_NETWORKS" in changes:
+        from .lockout import parse_networks
+        try:
+            nets = parse_networks(changes["LOCAL_NETWORKS"])
+        except ValueError as e:
+            raise SettingsError(f"No password from: {e}")
+        if any(n.prefixlen == 0 for n in nets):
+            raise SettingsError("No password from: 0.0.0.0/0 or ::/0 would mean everyone, including the internet")
+        changes["LOCAL_NETWORKS"] = ", ".join(x.strip() for x in changes["LOCAL_NETWORKS"].replace(";", ",").split(",") if x.strip())
+    if "ALLOWED_HOSTS" in changes:
+        hosts = [h.strip().lower() for h in changes["ALLOWED_HOSTS"].split(",") if h.strip()]
+        if any(not re.fullmatch(r"[a-z0-9.-]+", h) for h in hosts):
+            raise SettingsError("Extra host names: letters, digits, dots and hyphens only")
+        changes["ALLOWED_HOSTS"] = ", ".join(hosts)
+    if merged("LOCKOUT_MAX_MINUTES") < merged("LOCKOUT_MINUTES"):
+        raise SettingsError("Longest lock must be at least the first lock")
     if "DISK_CHECK_PATH" in changes and not os.path.isdir(changes["DISK_CHECK_PATH"]):
         raise SettingsError("Disk to watch: folder does not exist")
     if "SERIAL_PORT" in changes and changes["SERIAL_PORT"].upper() == "SIMULATOR":

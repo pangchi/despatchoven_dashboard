@@ -139,13 +139,7 @@ async function refreshSystem() {
       dt.textContent = k; dd.textContent = v; return [dt, dd];
     }));
     const ev = await api("/events?limit=40");
-    $("events").replaceChildren(...ev.events.map((e) => {
-      const d = document.createElement("div");
-      if (!e.ok) d.className = "bad";
-      const det = e.detail ? " " + JSON.stringify(e.detail) : "";
-      d.textContent = `${new Date(e.ts).toLocaleString()} · ${e.source} · ${e.action}${det}`;
-      return d;
-    }));
+    $("events").replaceChildren(...ev.events.map((e) => eventRow(e)));
   } catch (e) { /* shown via status tags */ }
 }
 

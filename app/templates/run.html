@@ -5,14 +5,13 @@
 <title>Protocol 3 Monitor · Run {{ run_id }}</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body data-run="{{ run_id }}">
+<body data-run="{{ run_id }}" class="{% if who and who.level == 'view' %}viewonly{% endif %}">
 <header>
   <div class="brand"><a href="{{ url_for('web.runs_page') }}" class="back">← Runs</a> Run #{{ run_id }}</div>
   <div class="hdr-right">
     <a class="btn small" href="{{ url_for('web.index') }}">Dashboard</a>
     <span class="ver" title="Protocol 3 Monitor version">v{{ app_version }}</span>
-    <span class="muted">{{ user }}</span>
-    <form method="post" action="{{ url_for('web.logout') }}"><button class="btn small">Sign out</button></form>
+    {% include "_userbox.html" %}
   </div>
 </header>
 <main>
@@ -34,7 +33,7 @@
       <span class="k pw"></span>Power % <span class="k seg"></span>Segments (S1, S2 …) <span class="k held"></span>Held</div>
   </section>
   <section class="grid2">
-    <form class="card" id="editform">
+    <form class="card control-only" id="editform">
       <h2>Label &amp; notes</h2>
       <label class="stack">Label (lot / batch / job) <input id="label" maxlength="100"></label>
       <label class="stack">Notes <textarea id="notes" rows="5" maxlength="2000" placeholder="Board rev, quantity, operator, observations…"></textarea></label>

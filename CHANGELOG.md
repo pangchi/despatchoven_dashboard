@@ -3,6 +3,71 @@
 All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semantic versioning.
 
+## [1.7.0] - 2026-11-20
+
+### Added
+- **Dashboard without password on trusted networks** (optional, off by default):
+  - `LOCAL_NETWORKS` takes `localhost`, CIDRs and single IPs; `LOCAL_ACCESS` is `control` or `view`;
+    `ALLOWED_HOSTS` adds extra host names. All are editable in Settings → Login security.
+  - Passwordless users get a green **Local · <address>** badge with a **Sign in** button. In view-only mode the control
+    panel and label editing are hidden, and commands are refused with 403.
+  - Settings always need a password sign-in; the login page explains why when redirected there.
+  - Events: `local_access` (once per address per hour). Commands are logged as `local:<address>`.
+- Safeguards: forwarded requests are never local unless `TRUST_PROXY` is on; a host-name check blocks DNS rebinding;
+  the cross-site header check still applies; `0.0.0.0/0` and `::/0` are refused.
+- Unit tests for network matching, host check and validation.
+
+## [1.6.0] - 2026-11-20
+
+### Added
+- **Lock after consecutive failed attempts**: counted per dashboard account, per address signing in, and per address
+  using API keys (kept separate). Default 5 attempts; the first lock lasts 2 min and each further lock doubles, up to
+  60 min; counts reset on success and after 24 h without failures. All of this is configurable (`LOCKOUT_*`) in
+  `.env` or on the Settings page.
+- Locks are stored in PostgreSQL (`auth_lockouts`) and survive restarts, with an in-memory fallback while the
+  database is down.
+- Login page shows how long sign-in is locked, and warns when 2 or fewer attempts are left. Locked API requests get
+  `429` with `Retry-After`.
+- Settings → **Login security**: limits, a list of current locks and failing addresses, Unlock / Reset / Unlock all
+  (`/api/v1/settings/lockouts`, dashboard login only).
+- CLI on the Pi: `python -m app.tools lockouts` and `unlock [all | user <name> | ip <addr> | api <addr>]`, for when
+  you lock yourself out.
+- Events: `login_locked` / `api_locked` (alarm), `login_unlocked`, and attempts left on `login_failed` /
+  `api_key_rejected`.
+- `TRUST_PROXY` setting.
+- Unit tests for the lockout policy and client-address handling.
+
+### Changed
+- **Security fix:** `X-Real-IP` / `X-Forwarded-For` were trusted from any client, so a fake address on every attempt
+  avoided the old block. They are now ignored unless `TRUST_PROXY=true`.
+- Replaced the in-memory "10 failures in 5 min per IP" throttle, which was cleared on every restart.
+- The password hash is checked even for a wrong username, so response time no longer reveals valid usernames.
+- A dashboard session is no longer blocked because its address has failed API-key attempts.
+
+## [1.5.0] - 2026-11-19
+
+### Added
+- **Event log page** (`/events`): severity chips with counts, category chips, text search (including event details),
+  source, date/time range, failures only, paging, live updates with highlighted new rows, expandable raw detail,
+  links to runs, filters kept in the URL, **CSV export**; stacked card layout on phones. Linked from the dashboard
+  header and its Recent events panel.
+- **Process events** detected from the controller: alarm 1–5 on/off, high limit tripped/reset, control and
+  high-limit thermocouple open/OK, and mode change, setpoint change, profile hold/resume and segment change made at
+  the controller. States already abnormal at monitor start are logged once. Changes made through this app are not
+  logged twice.
+- **Access events**: sign-out, failed sign-in (username tried, IP), sign-in blocked after repeated failures, and
+  rejected API key (IP and path; the key is never stored).
+- Every event has a `category` (control / process / run / settings / access / system) and a `severity`
+  (info / warning / alarm). Existing events are classified when the database upgrades.
+- API: `/api/v1/events` gains `offset`, `category`, `severity`, `source`, `action`, `q` and `failed` filters, plus
+  `total` and per-severity `counts`; new `/api/v1/events.csv`.
+- Plain-language event text shared by the dashboard, run page and event log.
+- Simulator: `P3_SIM_ALARM1` raises alarm 1 above a PV, for testing.
+- Unit tests for event detection and classification.
+
+### Changed
+- `run_ended` is a warning only for aborted, error or interrupted runs; normal stops are info.
+
 ## [1.4.1] - 2026-11-13
 
 ### Added

@@ -14,6 +14,8 @@ class Cfg:
     POLL_INTERVAL = 2.0; LOG_INTERVAL_ACTIVE = 5.0; LOG_INTERVAL_IDLE = 60.0; IDLE_PV_THRESHOLD = None; IDLE_HOLDOFF = 300.0
     PURGE_THRESHOLD_PCT = 80.0; PURGE_TARGET_PCT = 75.0; RETENTION_DAYS = 0; PURGE_CHECK_INTERVAL = 600.0
     DISK_CHECK_PATH = "/"; CONTROL_ENABLED = True; SETPOINT_MIN = None; SETPOINT_MAX = None; LOG_LEVEL = "INFO"
+    LOCKOUT_ENABLED = True; LOCKOUT_ATTEMPTS = 5; LOCKOUT_MINUTES = 2; LOCKOUT_MAX_MINUTES = 60
+    LOCKOUT_RESET_HOURS = 24.0; TRUST_PROXY = False
 
 
 def test_only_changed_values_returned():
@@ -32,6 +34,7 @@ def test_blank_secret_keeps_password():
     {"SERIAL_PORT": "COM3"}, {"PURGE_TARGET_PCT": 85}, {"LOG_INTERVAL_IDLE": 2},
     {"SETPOINT_MIN": 300, "SETPOINT_MAX": 200}, {"DISK_CHECK_PATH": "/no/such/dir"},
     {"DB_NAME": ""}, {"DB_HOST": "a\nb"}, {"POLL_INTERVAL": "nan"},
+    {"LOCKOUT_ATTEMPTS": 0}, {"LOCKOUT_MINUTES": 30, "LOCKOUT_MAX_MINUTES": 10},
 ])
 def test_rejects_bad_input(body):
     with pytest.raises(S.SettingsError):

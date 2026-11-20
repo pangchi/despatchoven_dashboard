@@ -10,6 +10,7 @@ from .config import Config
 from .controller import make_controller
 from .db import Database
 from .poller import Poller
+from .lockout import Lockouts
 from .runs import RunTracker
 
 def _read_version():
@@ -33,8 +34,9 @@ class _JSON(DefaultJSONProvider):
 
 
 class Services:
-    def __init__(self, cfg, db, controller, poller, runs):
+    def __init__(self, cfg, db, controller, poller, runs, lockouts):
         self.cfg, self.db, self.controller, self.poller, self.runs = cfg, db, controller, poller, runs
+        self.lockouts = lockouts
 
 
 def create_app(cfg=None):
@@ -67,7 +69,7 @@ def create_app(cfg=None):
     poller = Poller(controller, db, cfg, runs)
     if db_error:
         poller.db_ok, poller.db_error = False, db_error
-    app.extensions["p3"] = Services(cfg, db, controller, poller, runs)
+    app.extensions["p3"] = Services(cfg, db, controller, poller, runs, Lockouts(db, cfg))
 
     from . import api, runs_api, settings_api, web
     app.register_blueprint(api.bp)
@@ -84,7 +86,8 @@ def create_app(cfg=None):
 
     @app.context_processor
     def _inject_version():
-        return {"app_version": __version__}
+        from flask import g
+        return {"app_version": __version__, "who": getattr(g, "user", None)}
 
     @app.url_defaults
     def _static_cache_bust(endpoint, values):

@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Protocol 3 Monitor · Event log</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="{% if who and who.level == 'view' %}viewonly{% endif %}">
+<header>
+  <div class="brand"><a href="{{ url_for('web.index') }}" class="back">← Dashboard</a> Event log</div>
+  <div class="hdr-right">
+    <a class="btn small" href="{{ url_for('web.runs_page') }}">Runs</a>
+    <a class="btn small" href="{{ url_for('web.settings_page') }}">Settings</a>
+    <span class="ver" title="Protocol 3 Monitor version">v{{ app_version }}</span>
+    {% include "_userbox.html" %}
+  </div>
+</header>
+<main>
+  <section class="sevbar" id="sevbar" aria-label="Filter by severity">
+    <button type="button" data-sev="" class="on">All <b id="c_all">–</b></button>
+    <button type="button" data-sev="alarm"><span class="sevdot alarm"></span>Alarms <b id="c_alarm">–</b></button>
+    <button type="button" data-sev="warning"><span class="sevdot warning"></span>Warnings <b id="c_warning">–</b></button>
+    <button type="button" data-sev="info"><span class="sevdot info"></span>Info <b id="c_info">–</b></button>
+  </section>
+
+  <form class="card filters" id="filters">
+    <div class="catchips" id="cats" role="group" aria-label="Categories">
+      <span class="muted small">Category</span>
+      <button type="button" data-cat="process">Process</button>
+      <button type="button" data-cat="control">Control</button>
+      <button type="button" data-cat="run">Run</button>
+      <button type="button" data-cat="settings">Settings</button>
+      <button type="button" data-cat="access">Access</button>
+      <button type="button" data-cat="system">System</button>
+    </div>
+    <label>Search <input name="q" placeholder="text, user, alarm no., IP…" maxlength="100"></label>
+    <label>Source <input name="source" placeholder="api:, web:, controller" maxlength="64" class="mid"></label>
+    <label>From <input name="from" type="datetime-local"></label>
+    <label>To <input name="to" type="datetime-local"></label>
+    <label class="check"><input name="failed" type="checkbox"> Failures only</label>
+    <button class="btn" type="reset">Clear</button>
+  </form>
+
+  <section class="card">
+    <div class="card-hdr">
+      <h2 id="count">Events</h2>
+      <div class="tools-inline">
+        <label class="check"><input type="checkbox" id="live" checked> Live</label>
+        <a class="btn small" id="csv" href="/api/v1/events.csv">Download CSV</a>
+      </div>
+    </div>
+    <div class="tablewrap">
+      <table class="evtable">
+        <thead><tr><th>Time</th><th>Severity</th><th>Category</th><th>Event</th><th>Source</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="5" class="muted">Loading…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="pager"><button class="btn small" id="prev">← Newer</button><span id="page" class="muted"></span>
+      <button class="btn small" id="next">Older →</button></div>
+  </section>
+</main>
+<script src="{{ url_for('static', filename='chart.js') }}"></script>
+<script src="{{ url_for('static', filename='events.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+{% if who and who.kind == 'local' %}
+    <span class="tag local" title="Signed in automatically: this address is on a trusted local network (no password){% if who.level == 'view' %} - view only{% endif %}">{{ who.label }}{% if who.level == 'view' %} · view only{% endif %}</span>
+    <a class="btn small" href="{{ url_for('web.login', next=request.path) }}">Sign in</a>
+{% elif who %}
+    <span class="muted">{{ who.label }}</span>
+    <form method="post" action="{{ url_for('web.logout') }}"><button class="btn small">Sign out</button></form>
+{% endif %}

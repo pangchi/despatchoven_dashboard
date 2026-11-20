@@ -84,3 +84,71 @@ const fmtDur = (s) => {
 const runTitle = (r) => r.mode === "profile" ? `Profile ${r.profile}` : r.mode === "timer" ? "Timer" : "Manual";
 const resultClass = (r) => !r.ended_at ? "warn" : (r.end_reason === "completed" ? "ok" : (/abort|error|interrupt/.test(r.end_reason || "") ? "bad" : ""));
 const resultText = (r) => !r.ended_at ? "running" : (r.end_reason || "ended");
+
+/* ---------- events: plain-language text, shared by dashboard, run page and event log ---------- */
+const SEV_CLASS = { info: "", warning: "warn", alarm: "bad" };
+const CAT_LABEL = { control: "Control", process: "Process", run: "Run", settings: "Settings", access: "Access", system: "System" };
+function describeEvent(e) {
+  const d = e.detail || {}, n = (v) => (v == null ? "?" : Number(v).toFixed(1));
+  const fail = !e.ok && d.error ? ` – failed: ${d.error}` : (!e.ok && e.category === "control" ? " – failed" : "");
+  const T = {
+    alarm_on: () => `Alarm ${d.alarm} active (PV ${n(d.pv)})${d.at_startup ? " – already active when monitoring started" : ""}`,
+    alarm_off: () => `Alarm ${d.alarm} cleared (PV ${n(d.pv)})`,
+    high_limit_tripped: () => `HIGH LIMIT TRIPPED – high-limit PV ${n(d.hl_pv)}, limit ${n(d.limit)}${d.at_startup ? " (already tripped at monitor start)" : ""}`,
+    high_limit_reset: () => `High limit reset (high-limit PV ${n(d.hl_pv)})`,
+    sensor_break: () => "Control thermocouple open (sensor break)",
+    sensor_ok: () => `Control thermocouple OK again (PV ${n(d.pv)})`,
+    hl_sensor_open: () => "High-limit thermocouple open",
+    hl_sensor_ok: () => "High-limit thermocouple OK again",
+    mode_changed: () => `Mode changed at controller: ${d.from} → ${d.to}`,
+    setpoint_changed: () => `Setpoint changed at controller: ${n(d.from)} → ${n(d.to)}`,
+    profile_held: () => `Profile ${d.profile} held at controller (segment ${d.segment}, PV ${n(d.pv)})`,
+    profile_resumed: () => `Profile ${d.profile} resumed at controller (segment ${d.segment})`,
+    segment_changed: () => `Profile ${d.profile}: segment ${d.segment} ${d.type} (SP ${n(d.sp)}, PV ${n(d.pv)})`,
+    run_started: () => `Run #${d.run} started – ${d.mode === "profile" ? "profile " + d.profile : d.mode}${d.label ? " · " + d.label : ""} (by ${d.by || "?"})`,
+    run_ended: () => `Run #${d.run} ended – ${d.reason}`,
+    run_edited: () => `Run #${d.run} edited${d.label != null ? ` – label “${d.label}”` : ""}${d.notes_changed ? ", notes" : ""}`,
+    run_next_label: () => d.label ? `Next run label set: ${d.label}` : "Next run label cleared",
+    set_setpoint: () => `Setpoint → ${d.value}${fail}`,
+    set_mode: () => `Mode → ${d.mode}${fail}`,
+    manual: () => `Manual ${d.action}${d.label ? " · " + d.label : ""}${fail}`,
+    timer: () => `Timer ${d.action}${d.seconds ? " (" + d.seconds + " s)" : ""}${d.label ? " · " + d.label : ""}${fail}`,
+    profile: () => `Profile ${d.action}${d.profile != null ? " #" + d.profile : ""}${d.label ? " · " + d.label : ""}${fail}`,
+    relay: () => `Relay ${d.relay} ${d.on ? "on" : "off"}${fail}`,
+    set_high_limit: () => `High limit → ${d.value}${fail}`,
+    settings_saved: () => `Settings changed: ${Object.keys(d).join(", ")}`,
+    settings_test_serial: () => `Connection test ${d.port} @ ${d.baud}: ${d.ok ? "OK" : "no answer"}`,
+    settings_detect_serial: () => d.found ? `Auto-detect: found ${d.SERIAL_BAUD} baud, parity ${d.SERIAL_PARITY}` : `Auto-detect: no answer (${d.tried} tried)`,
+    login: () => `Signed in from ${d.ip}`,
+    logout: () => `Signed out from ${d.ip}`,
+    login_failed: () => `Failed sign-in as “${d.username}” from ${d.ip}` + (d.attempts_left != null ? ` – ${d.attempts_left} attempt(s) left` : ""),
+    login_locked: () => d.scope
+      ? `SIGN-IN LOCKED for ${d.minutes} min – ${d.scope === "user" ? "account " + d.subject : "address " + d.subject} (lock #${d.level})`
+      : `Sign-in blocked (too many failures) from ${d.ip}`,
+    login_unlocked: () => d.all || (d.args && d.args[0] === "all") ? `All sign-in locks cleared (${d.cleared})` : `Sign-in lock cleared: ${d.scope || (d.args || []).join(" ")} ${d.subject || ""}`,
+    api_key_rejected: () => `Rejected API key from ${d.ip} (${d.path})` + (d.attempts_left != null ? ` – ${d.attempts_left} attempt(s) left` : ""),
+    local_access: () => `Dashboard used without password from ${d.ip} (trusted network, ${d.level === "view" ? "view only" : "full control"})`,
+    api_locked: () => `API KEYS LOCKED for ${d.minutes} min from ${d.ip} (lock #${d.level})`,
+    startup: () => `Monitor started – v${d.version}, port ${d.port}`,
+    comm_lost: () => `Controller communication lost${d.error ? ": " + d.error : ""}`,
+    comm_restored: () => "Controller communication restored",
+    db_connected: () => "Database connected",
+    purge: () => `Purged ${(d.dropped || []).length} day(s) of old telemetry (disk ${n(d.disk_pct_after)} %)`,
+    purge_check: () => `Purge check run – ${d.dropped} day(s) dropped`,
+  };
+  try { if (T[e.action]) return T[e.action](); } catch (err) { /* fall through */ }
+  return e.action + (e.detail ? " " + JSON.stringify(e.detail) : "");
+}
+function eventRow(e, opts = {}) {
+  /* compact one-line event for side panels */
+  const div = document.createElement("div");
+  div.className = "ev " + (SEV_CLASS[e.severity] || "") + (e.ok ? "" : " failed");
+  const t = new Date(e.ts);
+  const time = opts.timeOnly ? t.toLocaleTimeString() : t.toLocaleString([], { dateStyle: "short", timeStyle: "medium" });
+  const dot = Object.assign(document.createElement("span"), { className: "sevdot " + (e.severity || "info"), title: e.severity || "" });
+  const txt = document.createElement("span");
+  txt.textContent = `${time} · ${describeEvent(e)}`;
+  const src = Object.assign(document.createElement("span"), { className: "src", textContent: e.source });
+  div.append(dot, txt, src);
+  return div;
+}
